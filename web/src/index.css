@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Bricolage Grotesque", "Manrope", sans-serif;
+
+  --color-ink: #172033;      /* graphite navy: text, sidebar */
+  --color-ink-2: #4A5468;    /* secondary text */
+  --color-mist: #F3F5F8;     /* app background (cool, not cream) */
+  --color-line: #DDE3EA;     /* hairlines */
+  --color-brand: #0E6E6E;    /* deep teal: primary actions */
+  --color-brand-2: #0B5858;
+
+  /* Lead temperature scale — the one bold element */
+  --color-cold: #5B8DEF;
+  --color-warm: #E9A23B;
+  --color-hot: #E5533D;
+}
+
+html { background: var(--color-mist); color: var(--color-ink); }
+body { font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
+h1, h2, h3 { font-family: var(--font-display); letter-spacing: -0.01em; }
+
+:focus-visible { outline: 2px solid var(--color-brand); outline-offset: 2px; border-radius: 4px; }
+
+@utility btn { @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed; }
+@utility btn-primary { @apply btn bg-brand text-white hover:bg-brand-2; }
+@utility btn-ghost { @apply btn text-ink-2 hover:bg-white hover:text-ink; }
+@utility btn-outline { @apply btn border border-line bg-white text-ink hover:border-ink-2; }
+@utility btn-danger { @apply btn border border-red-200 bg-white text-red-700 hover:bg-red-50; }
+@utility input { @apply w-full rounded-lg border border-line bg-white px-3 py-2 text-sm outline-none placeholder:text-slate-400 focus:border-brand focus:ring-2 focus:ring-brand/15; }
+@utility label { @apply mb-1 block text-sm font-medium text-ink; }
+@utility panel { @apply rounded-xl border border-line bg-white; }
+@utility chip { @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium; }
+@utility th { @apply px-4 py-2.5 text-left text-xs font-semibold text-ink-2; }
+@utility td { @apply px-4 py-3 text-sm align-middle; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
