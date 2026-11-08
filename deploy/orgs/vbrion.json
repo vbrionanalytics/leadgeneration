@@ -1,0 +1,29 @@
+{
+  "ownerEmail": "info@vbrion.com",
+  "name": "Vbrion Private Limited",
+  "defaultCountry": "IN",
+  "plan": "agency",
+  "creditsAtLeast": 5000,
+  "sender": {
+    "name": "Vaishnavi C",
+    "email": "info@vbrion.com",
+    "companyName": "Vbrion Private Limited",
+    "website": "https://vbrion.com",
+    "postalAddress": "No. 301/180, Vinayagar Kovil Street, 10-A, Nadar Medu, Erode – 638002, Tamil Nadu, India",
+    "signature": "Vaishnavi C\nBusiness Head, vbrion analytics\n+91 7718079297 | info@vbrion.com | https://vbrion.com"
+  },
+  "services": [
+    { "name": "Website & Digital Product Development", "description": "Websites, web apps and SaaS platforms, from MVP to production" },
+    { "name": "Technology & Product Engineering", "description": "Cloud-native platforms, APIs, microservices and CI/CD" },
+    { "name": "Business Development Analytics", "description": "B2B intent scoring, pricing and pipeline analytics" },
+    { "name": "Dashboards & BI Visualizations", "description": "Power BI and Tableau executive dashboards" },
+    { "name": "AI & Predictive Intelligence", "description": "Machine learning models, forecasting and AI copilots" },
+    { "name": "Intelligent Process Automation", "description": "Workflow automation and document AI" },
+    { "name": "Healthcare Analytics", "description": "Clinical predictive models and hospital operations intelligence" },
+    { "name": "Education Analytics", "description": "Student retention, dropout early warning and campus analytics" },
+    { "name": "Fintech Solutions", "description": "Fraud detection, credit scoring and payment reconciliation" },
+    { "name": "Banking Solutions", "description": "Risk analytics, AML triage and customer lifetime value models" },
+    { "name": "Risk & Governance", "description": "Enterprise risk frameworks, internal controls and audit readiness" },
+    { "name": "Legal Compliances", "description": "Statutory tracking and compliance audits" }
+  ]
+}

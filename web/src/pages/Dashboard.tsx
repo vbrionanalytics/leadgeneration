@@ -29,7 +29,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="Leads" value={s.total} hint={`${s.analysed} analysed`} />
         <Stat label="Qualified" value={(s.byStatus.qualified || 0) + (s.byStatus.contacted || 0) + (s.byStatus.replied || 0) + (s.byStatus.won || 0)} hint="Score 60+ or worked" />
-        <Stat label="Awaiting your approval" value={e.pending ?? 0} hint="AI drafts" />
+        <Stat label="Awaiting your approval" value={e.pending ?? 0} hint="Drafts to review" />
         <Stat label="Emails sent" value={e.sent ?? 0} hint={e.sent ? `${Math.round(((e.opened || 0) / e.sent) * 100)}% opened, ${e.replied || 0} replied` : 'None yet'} />
       </div>
 

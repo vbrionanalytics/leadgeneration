@@ -210,14 +210,19 @@ fi
 
 # ---------------------------------------------------------------- 6. what to paste into n8n
 if [[ $MODE == direct ]]; then
-  step "Next: email sending (direct mode, no n8n needed)"
-  cat <<EOF
+  if [[ -n $(env_get "$S" SMTP_URL) ]]; then
+    step "Email sending"
+    ok "configured (direct mode, no n8n needed)"
+  else
+    step "Next: email sending (direct mode, no n8n needed)"
+    cat <<EOF
   Everything runs inside the app: OpenStreetMap searches (free), website checks, rule-based scores, template drafts.
   To let approved emails go out, add this line to $S, then re-run this script:
      SMTP_URL=smtps://you%40yourdomain.com:<app-password>@smtp.gmail.com:465
   (Google Workspace / Gmail: create an App Password under Google Account > Security.)
-  Sign up at $BASE with $(env_get "$S" PLATFORM_ADMIN_EMAILS | cut -d, -f1) to get the admin dashboard.
 EOF
+  fi
+  printf '  Admin: sign up at %s with %s\n' "$BASE" "$(env_get "$S" PLATFORM_ADMIN_EMAILS | cut -d, -f1)"
 else
 step "Next: n8n credentials ($N8N_URL → Credentials → Add)"
 cat <<EOF
@@ -237,4 +242,9 @@ cat <<EOF
   Sign up at $BASE with $(env_get "$S" PLATFORM_ADMIN_EMAILS | cut -d, -f1) to get the admin dashboard.
 EOF
 fi
-printf '\n%sDone.%s Logs: pm2 logs   Re-run this script after every code update.\n' "$c_ok" "$c_0"
+# ---------------------------------------------------------------- 7. self-test
+if [[ "${SKIP_SELFTEST:-0}" != 1 ]]; then
+  step "Self-test"
+  ( cd "$APP_DIR/server" && as_user node scripts/selftest.js | sed -n '/self-test/,$p' | tail -n +2 ) || warn "some checks failed (details above); fix them and re-run"
+fi
+printf '\n%sDone.%s Logs: pm2 logs   Self-test: cd server && npm run selftest   Re-run this script after every code update.\n' "$c_ok" "$c_0"
