@@ -109,7 +109,10 @@ export function templateEmail(input: TemplateInput): { subject: string; body: st
     : `I came across ${n}${input.lead.city && !n.toLowerCase().includes(input.lead.city.toLowerCase()) ? ` in ${input.lead.city}` : ''} and had a look at how you show up online.`;
 
   const services = (input.recommended || []).map((s) => s.name).slice(0, 2);
-  const who = input.sender.company ? `At ${input.sender.company}, we` : 'We';
+  // Freelancers (no separate company name) speak for themselves; agencies speak as the company
+  const company = input.sender.company?.trim();
+  const solo = !company || company.toLowerCase() === (input.sender.name || '').trim().toLowerCase();
+  const who = solo ? 'I' : `At ${company}, we`;
   const offer = services.length
     ? `${who} help businesses like yours with ${listJoin(services)}${picked[0]?.line.key === 'Website is broken' ? ', and getting a site back online is usually quick' : ''}.`
     : `${who} help local businesses get more from their website and online listings.`;

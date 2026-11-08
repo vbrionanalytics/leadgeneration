@@ -72,11 +72,11 @@ function Profile({ org }: { org: Org }) {
       <div className="grid gap-4 sm:grid-cols-2">
         {fld('sname', 'Sender name', { required: true })}
         {fld('email', 'Sender email', { type: 'email', required: true })}
-        {fld('companyName', 'Company legal name')}
+        {fld('companyName', 'Business name (leave empty if you freelance under your own name)')}
         {fld('website', 'Company website', { type: 'url', placeholder: 'https://' })}
       </div>
       <div><label className="label" htmlFor="pa">Business postal address</label><textarea id="pa" className="input" required value={f.postalAddress} onChange={(e) => setF({ ...f, postalAddress: e.target.value })} /><p className="mt-1 text-xs text-ink-2">Required by CAN-SPAM, UK PECR and similar laws. Shown in every email footer.</p></div>
-      <div><label className="label" htmlFor="sig">Signature</label><textarea id="sig" className="input" placeholder={'Prawin Kumar\nDealpost Private Limited\n+91 …'} value={f.signature} onChange={(e) => setF({ ...f, signature: e.target.value })} /></div>
+      <div><label className="label" htmlFor="sig">Signature</label><textarea id="sig" className="input" placeholder={'Your name\nFreelance web developer\n+91 …'} value={f.signature} onChange={(e) => setF({ ...f, signature: e.target.value })} /></div>
       <div className="flex justify-end"><button className="btn-primary" disabled={saving}>{saving && <Spinner />} Save changes</button></div>
     </form>
   );

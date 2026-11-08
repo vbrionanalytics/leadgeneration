@@ -153,6 +153,15 @@ describe('template writer', () => {
     expect(t.body).toContain('I came across Kovai Mess in Coimbatore');
     expect(templateEmail({ lead: { name: 'Merlis Hotel, Coimbatore', city: 'Coimbatore' }, sender: {} }).body).toContain('I came across Merlis Hotel, Coimbatore and');
   });
+  it('writes in the first person for freelancers', () => {
+    const ev = [{ signal: 'No website', detail: 'Listing has no website URL.', impact: 20 }];
+    const solo = templateEmail({ lead: { name: 'Kovai Mess' }, evidence: ev, recommended: [{ name: 'Website Redesign' }], sender: { name: 'Prawin Kumar N', company: '' } });
+    expect(solo.body).toContain('I help businesses like yours with Website Redesign');
+    const same = templateEmail({ lead: { name: 'Kovai Mess' }, sender: { name: 'Prawin Kumar N', company: 'Prawin Kumar N' } });
+    expect(same.body).toContain('I help local businesses');
+    const agency = templateEmail({ lead: { name: 'Kovai Mess' }, sender: { name: 'Prawin', company: 'Acme Web Studio' } });
+    expect(agency.body).toContain('At Acme Web Studio, we help');
+  });
   it('uses the campaign tone for the call to action', () => {
     const t = templateEmail({ lead: { name: 'X' }, sender: {}, campaign: { tone: 'concise' } });
     expect(t.body.trim().endsWith('Open to a 15-minute call this week?')).toBe(true);
