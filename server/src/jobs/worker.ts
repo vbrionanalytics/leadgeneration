@@ -20,8 +20,9 @@ const orgKey = (org: any, k: 'googlePlacesKey' | 'anthropicKey') => (org?.secret
 
 const discovery: Handler = async ({ jobId }) => {
   const job = await SearchJob.findById(jobId);
-  if (!job || job.status === 'cancelled') return;
-  await SearchJob.updateOne({ _id: jobId }, { $set: { status: 'running', startedAt: new Date() } });
+  // A retry must not reopen a search that n8n already completed (or that was cancelled/failed)
+  if (!job || !['queued', 'running'].includes(job.status)) return;
+  await SearchJob.updateOne({ _id: jobId, status: 'queued' }, { $set: { status: 'running', startedAt: new Date() } });
   const org = await Organization.findById(job.orgId);
   const q = job.query!;
   // Large searches are split into keyword sub-queries of ≤60 (Places Text Search page limit)
@@ -52,7 +53,8 @@ const discovery: Handler = async ({ jobId }) => {
 
 const analysis: Handler = async ({ leadId }) => {
   const lead = await Lead.findById(leadId);
-  if (!lead) return;
+  // Skip if the result already arrived (e.g. this is a retry after a slow n8n response)
+  if (!lead || !['queued', 'running'].includes(lead.analysisStatus)) return;
   await Lead.updateOne({ _id: leadId }, { $set: { analysisStatus: 'running' } });
   const org = await Organization.findById(lead.orgId);
   const services = (org?.services || []).map((s: any) => ({ name: s.name, description: s.description }));

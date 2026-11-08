@@ -179,6 +179,7 @@ describe('email generation, compliance & approval', () => {
 describe('n8n analysis callback validates AI output', () => {
   it('drops hallucinated services and falls back on invalid scores', async () => {
     const lead = await models.Lead.findOne({ orgId, sourceId: 'place_B' });
+    await models.Lead.updateOne({ _id: lead!._id }, { $set: { analysisStatus: 'queued' } }); // as requestAnalysis does
     const good = await request(app).post(`/api/integrations/n8n/analysis/${lead!._id}`).set('X-LeadGen-Key', 'n8n-shared-secret').send({
       analysis: null,
       score: { score: 71, breakdown: { need: 80, ability_to_pay: 50, reachability: 60, fit: 70 }, summary: 'No website; decent reviews.', evidence: [{ signal: 'No website', detail: 'Listing has no website', source: 'google_places', impact: 20 }], opportunities: [{ title: 'Website', description: 'None listed', priority: 'high' }], recommended_services: [{ name: 'Website Redesign', reason: 'x' }, { name: 'Invented Service', reason: 'y' }] }
@@ -186,8 +187,26 @@ describe('n8n analysis callback validates AI output', () => {
     expect(good.body.score).toBe(71);
     const l = await models.Lead.findById(lead!._id);
     expect(l!.recommendedServices.map((s: any) => s.name)).toEqual(['Website Redesign']);
+    await models.Lead.updateOne({ _id: lead!._id }, { $set: { analysisStatus: 'queued' } });
     const bad = await request(app).post(`/api/integrations/n8n/analysis/${lead!._id}`).set('X-LeadGen-Key', 'n8n-shared-secret').send({ analysis: null, score: { score: 500 } });
     expect(bad.body.scoredBy).toBe('heuristic');
+  });
+});
+
+describe('retries are idempotent', () => {
+  it('a duplicate analysis callback does not charge twice', async () => {
+    const lead = await models.Lead.findOne({ orgId, sourceId: 'place_B' });
+    await models.Lead.updateOne({ _id: lead!._id }, { $set: { analysisStatus: 'queued' } });
+    const score = { score: 60, breakdown: { need: 60, ability_to_pay: 60, reachability: 60, fit: 60 }, summary: 's', evidence: [], opportunities: [], recommended_services: [] };
+    const before = (await models.Organization.findById(orgId))!.credits;
+    const send = () => request(app).post(`/api/integrations/n8n/analysis/${lead!._id}`).set('X-LeadGen-Key', 'n8n-shared-secret').send({ analysis: null, score });
+    await send(); await send();
+    expect((await models.Organization.findById(orgId))!.credits).toBe(before - 2);
+  });
+  it('a retried discovery job does not reopen a completed search', async () => {
+    const job = await models.SearchJob.findOne({ orgId, status: 'completed' });
+    await handlers.discovery({ jobId: String(job!._id) }, { _id: job!._id, attempts: 2 });
+    expect((await models.SearchJob.findById(job!._id))!.status).toBe('completed');
   });
 });
 

@@ -83,12 +83,27 @@ export async function requestAnalysis(orgId: Types.ObjectId | string, leadIds: (
 }
 
 export async function applyAnalysis(leadId: string, analysis: WebsiteAnalysis | null, score: ScoreResult) {
-  const lead = await Lead.findById(leadId);
-  if (!lead) throw notFound('Lead not found');
+  // Claim the pending analysis atomically so a duplicate callback (n8n retry) can't charge twice.
+  const claimed = await Lead.findOneAndUpdate(
+    { _id: leadId, analysisStatus: { $in: ['queued', 'running'] } },
+    { $set: { analysisStatus: 'done' } },
+    { returnDocument: 'after' }
+  );
+  if (!claimed) {
+    const existing = await Lead.findById(leadId);
+    if (!existing) throw notFound('Lead not found');
+    return existing; // already applied, or never requested
+  }
+  const lead = claimed;
   const org = await Organization.findById(lead.orgId).select('compliance');
   const li = !!org?.compliance?.legitimateInterestAssessed;
 
-  await spendCredits(lead.orgId, CREDIT_COSTS.analysis, `Analysis: ${lead.name}`, String(lead._id));
+  try {
+    await spendCredits(lead.orgId, CREDIT_COSTS.analysis, `Analysis: ${lead.name}`, String(lead._id));
+  } catch (e) {
+    await Lead.updateOne({ _id: lead._id }, { $set: { analysisStatus: 'failed', 'website_analysis.error': 'Not enough credits to save the analysis.' } });
+    throw e;
+  }
 
   lead.website_analysis = analysis ?? undefined;
   lead.score = score.score;

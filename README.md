@@ -65,11 +65,33 @@ cd ../web && npm install && npm run dev   # http://localhost:5173 (proxies /api)
 Tests:
 
 ```bash
-cd server && npx vitest run         # 20 integration tests (needs MongoDB on 27017)
+cd server && npx vitest run         # 22 integration tests (needs MongoDB on 27017)
 cd analyzer && .venv/bin/pip install -r requirements-dev.txt && .venv/bin/pytest -q
 ```
 
-## Production deployment (Ubuntu VPS, Nginx, PM2, Certbot)
+## Production deployment: one command
+
+1. In the DNS for dealpost.co.in, add an **A record** `leadgen` → your VPS IP.
+2. Copy the project to the server and run the installer:
+
+```bash
+scp ai-leadgen.zip root@<vps-ip>:/var/www/ && ssh root@<vps-ip>
+cd /var/www && unzip ai-leadgen.zip && cd ai-leadgen
+sudo bash deploy/install.sh leadgen.dealpost.co.in
+```
+
+The installer:
+- installs Node 22, PM2, Python venv and MongoDB 8 if they're missing
+- generates every secret into `server/.env` and `analyzer/.env` (mode 600)
+- builds all three apps and starts them under PM2, with health checks
+- writes the Nginx site, opens UFW, and gets a Let's Encrypt certificate
+- prints the exact values to paste into the n8n credentials
+
+Re-running it is safe: secrets are kept and the code is rebuilt and reloaded. Run it again after every update.
+
+If ports 80/443 already belong to Docker/Traefik (Hostinger's one-click n8n image), the installer stops before touching anything and says so. The app is still running on 127.0.0.1:4000. Route the domain through that proxy instead, or move n8n behind Nginx.
+
+## Production deployment: manual steps (reference)
 
 Replace `leadgen.example.com` with the subdomain you choose. Point its DNS A record to the server.
 
