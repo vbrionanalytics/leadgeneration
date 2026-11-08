@@ -38,7 +38,7 @@ const LINES: Line[] = [
   {
     key: 'No website',
     subject: (n) => `A website for ${n}`,
-    sentence: (n) => `I came across ${n} on a map listing but couldn't find a website for you, so people searching online only see the basics.`
+    sentence: (n) => `I came across ${n} on a map listing and noticed it doesn't link to a website, so people who find you there only see the basics.`
   },
   {
     key: 'Not mobile-friendly',

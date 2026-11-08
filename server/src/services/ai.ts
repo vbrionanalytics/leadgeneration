@@ -108,6 +108,39 @@ export function sanitizeScore(raw: unknown, services: { name: string }[]): z.inf
   return parsed;
 }
 
+// Which kind of service fits which detected opportunity (matched against service names and descriptions).
+const SERVICE_FAMILIES: { opp: RegExp; svc: RegExp }[] = [
+  { opp: /website|https|mobile|seo|refresh|broken/i, svc: /web|website|digital product|seo|design/i },
+  { opp: /analytics/i, svc: /analytics|dashboard|\bbi\b|insight|report/i },
+  { opp: /booking|conversion|enquir/i, svc: /automation|booking|crm|web/i },
+  { opp: /reputation|review/i, svc: /review|reputation|marketing|social/i }
+];
+// Industry-specific services are only offered to businesses in that industry.
+const INDUSTRIES: { svc: RegExp; cat: RegExp }[] = [
+  { svc: /health|medical|hospital|clinic|pharma/i, cat: /hospital|clinic|dent|medical|pharm|doctor|health|diagnos|lab|nursing|eye care|physio/i },
+  { svc: /education|school|edtech|academ/i, cat: /school|college|education|academy|coaching|tuition|universit|institut|kindergarten/i },
+  { svc: /fintech|bank|financ|insurance|lending/i, cat: /bank|financ|insurance|loan|account|ca firm|chartered|atm|money/i },
+  { svc: /legal|law\b/i, cat: /law|legal|advocate|notary|lawyer/i },
+  { svc: /retail|e-?commerce|store/i, cat: /shop|store|retail|boutique|textile|mart|supermarket/i },
+  { svc: /hotel|hospitality|restaurant/i, cat: /hotel|resort|restaurant|cafe|hostel|guest ?house/i }
+];
+
+/** Pick up to three seller services that fit the detected opportunities and the lead's industry. */
+export function matchServices(oppTitles: string[], category: string | undefined | null, services: { name: string; description?: string }[]) {
+  const cat = (category || '').toLowerCase();
+  const picked: { name: string; reason: string; rank: number }[] = [];
+  services.forEach((s, i) => {
+    const text = `${s.name} ${s.description || ''}`;
+    const industry = INDUSTRIES.find((ind) => ind.svc.test(s.name));
+    if (industry && !industry.cat.test(cat)) return; // e.g. no Education Analytics for a hospital
+    const fam = SERVICE_FAMILIES.findIndex((f) => f.svc.test(text) && oppTitles.some((t) => f.opp.test(t)));
+    if (fam < 0) return;
+    const opp = oppTitles.find((t) => SERVICE_FAMILIES[fam].opp.test(t))!;
+    picked.push({ name: s.name, reason: `Fits: ${opp.toLowerCase()}${industry ? ` (${cat || 'their industry'})` : ''}.`, rank: (industry ? 0 : 100) + fam * 10 + i / 100 });
+  });
+  return picked.sort((a, b) => a.rank - b.rank).slice(0, 3).map(({ name, reason }) => ({ name, reason }));
+}
+
 /** Transparent rule-based score used when Claude is unavailable. Every point is backed by evidence. */
 export function heuristicScore(lead: LeadContext, a: WebsiteAnalysis | null, services: { name: string; description?: string }[]): ScoreResult {
   const evidence: ScoreResult['evidence'] = [];
@@ -116,8 +149,8 @@ export function heuristicScore(lead: LeadContext, a: WebsiteAnalysis | null, ser
   const add = (signal: string, detail: string, source: 'website' | 'google_places' | 'derived', impact: number) => evidence.push({ signal, detail, source, impact });
 
   if (!lead.website) {
-    need += 35; add('No website', 'Listing has no website URL.', 'google_places', 20);
-    opp.push({ title: 'Build a website', description: 'Business has no website listed.', priority: 'high' });
+    need += 35; add('No website', 'The map listing has no website link. Larger businesses often have a site that is simply missing from the listing, so check before pitching.', 'google_places', 20);
+    opp.push({ title: 'Build a website', description: 'No website on the map listing. Confirm they have none before pitching a new site.', priority: 'high' });
   } else if (a && !a.ok && /ENOTFOUND|NXDOMAIN|ConnectError|Unreachable|HTTP [45]\d\d|SSL|certificate/i.test(a.error || '') && !/robots/i.test(a.error || '')) {
     // The listed website is down or broken: an observed fact, and the clearest need a web agency can fill
     need += 40;
@@ -145,11 +178,7 @@ export function heuristicScore(lead: LeadContext, a: WebsiteAnalysis | null, ser
   // phone from listing counts toward reachability
   reach += 20;
   const clamp = (n: number) => Math.max(0, Math.min(100, Math.round(n)));
-  const oppText = opp.map((o) => o.title.toLowerCase()).join(' ');
-  const recommended = services
-    .filter((s) => s.name.toLowerCase().split(/\W+/).some((w) => w.length >= 3 && !["and", "the", "for"].includes(w) && oppText.includes(w)))
-    .slice(0, 3)
-    .map((s) => ({ name: s.name, reason: 'Matches detected opportunities.' }));
+  const recommended = matchServices(opp.map((o) => o.title), lead.category, services);
   const fit = clamp(services.length ? 30 + recommended.length * 20 : 50);
   const breakdown = { need: clamp(need), ability_to_pay: clamp(pay), reachability: clamp(reach), fit };
   const score = clamp(breakdown.need * 0.35 + breakdown.ability_to_pay * 0.25 + breakdown.reachability * 0.2 + breakdown.fit * 0.2);

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 process.env.JWT_SECRET = 'test-secret-test-secret-test-secret-123';
 process.env.ENCRYPTION_KEY = 'test-encryption-key-test-encryption-key';
-const { heuristicScore } = await import('./services/ai');
+const { heuristicScore, matchServices } = await import('./services/ai');
 const svc = [{ name: 'Website Redesign' }, { name: 'SEO Optimisation' }];
 const lead = { name: 'X', website: 'https://x.test' };
 
@@ -16,5 +16,21 @@ describe('rule-based score', () => {
   it('does not treat a robots.txt refusal as a broken site', () => {
     const r = heuristicScore(lead, { ok: false, error: 'Disallowed by robots.txt' }, svc);
     expect(r.evidence[0].signal).toBe('Website not analysed');
+  });
+});
+
+describe('service matching', () => {
+  const vbrion = require('../../deploy/orgs/vbrion.json').services as { name: string; description?: string }[];
+  it('offers healthcare, not education, analytics to a hospital', () => {
+    const r = matchServices(['Enable HTTPS', 'Set up analytics', 'SEO fixes'], 'hospital', vbrion).map((s) => s.name);
+    expect(r[0]).toBe('Healthcare Analytics');
+    expect(r).toContain('Website & Digital Product Development');
+    expect(r).not.toContain('Education Analytics');
+  });
+  it('offers web work for SEO-only findings', () => {
+    expect(matchServices(['SEO fixes'], 'hospital', vbrion).map((s) => s.name)).toEqual(['Website & Digital Product Development']);
+  });
+  it('offers education analytics to a school', () => {
+    expect(matchServices(['Set up analytics'], 'school', vbrion).map((s) => s.name)[0]).toBe('Education Analytics');
   });
 });

@@ -138,6 +138,8 @@ leadsRouter.get('/stats', asyncH(async (req, res) => {
   res.json({ total: leads.length, analysed, byStatus, byCountry, scoreBuckets, daily });
 }));
 
+const CONTACT_SOURCES: Record<string, string> = { consent_form: 'Consent on record', manual: 'Added manually (no consent recorded)', website_public: 'Their website', openstreetmap: 'OpenStreetMap listing', google_places: 'Google listing', marketplace: 'Marketplace purchase' };
+
 leadsRouter.get('/export', requireScope('leads:read'), validate(listQuery.omit({ page: true, limit: true }), 'query'), asyncH(async (req, res) => {
   const q = (req as any).validQuery;
   const leads = await Lead.find(buildFilter(req.auth!.orgId, q)).sort({ score: -1 }).limit(10000).lean();
@@ -155,11 +157,13 @@ leadsRouter.get('/export', requireScope('leads:read'), validate(listQuery.omit({
   for (const l of leads as any[]) {
     const emails = (l.contacts || []).filter((c: any) => c.type === 'email');
     ws.addRow({
-      ...l, emails: emails.map((e: any) => e.value).join(', '), emailSource: emails.map((e: any) => e.sourceUrl || e.source).join(', '),
+      ...l, emails: emails.map((e: any) => e.value).join(', '), emailSource: emails.map((e: any) => e.sourceUrl || CONTACT_SOURCES[e.source] || e.source).join(', '),
       opps: (l.opportunities || []).map((o: any) => o.title).join('; '), services: (l.recommendedServices || []).map((s: any) => s.name).join('; '),
-      summary: l.scoreSummary, maps: l.googleMapsUrl || l.listingUrl, source: l.source === 'openstreetmap' ? 'OpenStreetMap' : l.source === 'google_places' ? 'Google Places' : l.source, createdAt: new Date(l.createdAt)
+      summary: l.scoreSummary, maps: l.googleMapsUrl || l.listingUrl, source: l.source === 'openstreetmap' ? 'OpenStreetMap' : l.source === 'google_places' ? 'Google Places' : l.source, createdAt: new Date(new Date(l.createdAt).getTime() + (l.country === 'IN' ? 330 * 60_000 : 0)) // Excel has no time zones: show Indian leads in IST
     });
   }
+  ws.getColumn('createdAt').numFmt = 'dd mmm yyyy hh:mm';
+  ws.getColumn('createdAt').width = 18;
   ws.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
   ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } };
   ws.autoFilter = { from: 'A1', to: 'Q1' };
