@@ -131,9 +131,9 @@ ok "secrets generated (existing values kept)"
 
 MODE=$(env_get "$S" AUTOMATION_MODE)
 if [[ $MODE == direct ]]; then
-  [[ -n $(env_get "$S" ANTHROPIC_API_KEY) ]] || warn "direct mode: ANTHROPIC_API_KEY is empty, so scoring will use the rule-based fallback"
-  [[ -n $(env_get "$S" GOOGLE_PLACES_API_KEY) ]] || warn "direct mode: GOOGLE_PLACES_API_KEY is empty, so searches will fail"
-  [[ -n $(env_get "$S" SMTP_URL) ]] || warn "direct mode: SMTP_URL is empty, so approved emails can't be sent"
+  if [[ $(env_get "$S" AI_ENABLED) == true && -z $(env_get "$S" ANTHROPIC_API_KEY) ]]; then warn "AI_ENABLED=true but ANTHROPIC_API_KEY is empty, so scoring falls back to rules"; fi
+  [[ -n $(env_get "$S" GOOGLE_PLACES_API_KEY) ]] || ok "searches use OpenStreetMap (free); add GOOGLE_PLACES_API_KEY to offer Google too"
+  [[ -n $(env_get "$S" SMTP_URL) ]] || warn "SMTP_URL is empty, so approved emails can't be sent yet (see the end of this output)"
 fi
 
 # ---------------------------------------------------------------- 3. build
