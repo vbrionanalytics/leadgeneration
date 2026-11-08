@@ -261,7 +261,7 @@ export async function precheckSend(emailId: string) {
     return { allowed: false, reasons: comp.reasons };
   }
   const org = await Organization.findById(email.orgId);
-  const rendered = renderEmail({ body: email.body, sender: org!.sender || {}, unsubscribeToken: email.unsubscribeToken!, trackingId: email.trackingId! });
+  const rendered = renderEmail({ body: email.body, sender: org!.sender || {}, unsubscribeToken: email.unsubscribeToken!, trackingId: email.trackingId!, basis: comp.basis });
   return {
     allowed: true,
     emailId: String(email._id),

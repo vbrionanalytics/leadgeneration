@@ -15,13 +15,19 @@ export function unsubscribeUrl(token: string) {
  * Build the final compliant message. Footer (identity, address, unsubscribe) is always added
  * by the platform — never by AI — so it can't be omitted.
  */
-export function renderEmail(opts: { body: string; sender: Sender; unsubscribeToken: string; trackingId: string; trackOpens?: boolean }) {
+const REASONS: Record<string, string> = {
+  express_consent: 'You received this email because you agreed to be contacted by us.',
+  legitimate_interest: 'You received this one-off business email because your business contact details are publicly listed and our services may be relevant to you.'
+};
+const DEFAULT_REASON = 'You received this one-off business email because your contact details are publicly listed for your business.';
+
+export function renderEmail(opts: { body: string; sender: Sender; unsubscribeToken: string; trackingId: string; trackOpens?: boolean; basis?: string | null }) {
   const unsub = unsubscribeUrl(opts.unsubscribeToken);
   const s = opts.sender;
   const sig = s.signature?.trim() || [s.name, s.companyName].filter(Boolean).join('\n');
   const footer = [
     `${s.companyName || s.name}${s.postalAddress ? `, ${s.postalAddress}` : ''}`,
-    `You received this one-off business email because your contact details are publicly listed for your business.`,
+    REASONS[opts.basis || ''] || DEFAULT_REASON,
     `Don't want to hear from us? Unsubscribe: ${unsub}`
   ].join('\n');
 
@@ -31,7 +37,7 @@ export function renderEmail(opts: { body: string; sender: Sender; unsubscribeTok
 ${escapeHtml(opts.body.trim()).replace(/\n/g, '<br>')}
 <br><br>${escapeHtml(sig).replace(/\n/g, '<br>')}
 <hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0 10px">
-<div style="font-size:11px;color:#6b7280">${escapeHtml(footer.split('\n').slice(0, 2).join(' ')).replace(/\n/g, '<br>')}<br>
+<div style="font-size:11px;color:#6b7280">${footer.split('\n').slice(0, 2).map(escapeHtml).join('<br>')}<br>
 <a href="${unsub}" style="color:#6b7280">Unsubscribe</a></div>${pixel}</div>`;
 
   return {
