@@ -13,7 +13,7 @@ export default function Admin() {
   const o = ov.data;
   return (
     <>
-      <PageHeader title="Platform admin" sub={o ? `Automation runs in ${o.automationMode === 'n8n' ? 'n8n' : 'direct (in-process)'} mode.` : undefined} />
+      <PageHeader title="Platform admin" sub={o ? `Automation runs in ${o.automationMode === 'n8n' ? 'n8n' : 'direct (in-process)'} mode. AI is ${o.aiEnabled ? 'on (Claude)' : 'off: free mode with rule-based scores and template drafts'}. Google Places is ${o.googlePlacesEnabled ? 'on' : 'off'}.` : undefined} />
       {o && (
         <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
           <Stat label="Organisations" value={o.orgs} hint={Object.entries(o.plans).map(([p, n]) => `${n} ${p}`).join(', ')} />

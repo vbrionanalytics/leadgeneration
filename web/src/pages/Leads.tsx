@@ -26,7 +26,7 @@ export default function LeadsPage() {
     onSuccess: (d) => {
       const ok = d.results.filter((r: any) => r.emailId).length;
       const skipped = d.results.filter((r: any) => r.error);
-      done(`${ok} email draft(s) are being written and will wait for your approval in Outreach.${skipped.length ? ` ${skipped.length} skipped: ${skipped[0].error}` : ''}`);
+      done(`${ok} email draft(s) are waiting for your approval in Outreach.${skipped.length ? ` ${skipped.length} skipped: ${skipped[0].error}` : ''}`);
     },
     onError: fail
   });

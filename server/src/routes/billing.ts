@@ -11,7 +11,11 @@ import { HttpError, badRequest, logger, safeEqual } from '../utils';
 
 const r = Router();
 
-r.get('/plans', (_req, res) => res.json({ plans: Object.values(PLANS), packs: CREDIT_PACKS, costs: CREDIT_COSTS, paymentsEnabled: !!(env.RAZORPAY_KEY_ID && env.RAZORPAY_KEY_SECRET) }));
+r.get('/plans', (_req, res) => res.json({
+  plans: Object.values(PLANS), packs: CREDIT_PACKS, paymentsEnabled: !!(env.RAZORPAY_KEY_ID && env.RAZORPAY_KEY_SECRET),
+  // Template drafts (free mode) cost nothing to produce, so they cost no credits
+  costs: { ...CREDIT_COSTS, emailDraft: env.AI_ENABLED ? CREDIT_COSTS.emailDraft : 0 }
+}));
 
 r.get('/balance', requireAuth, asyncH(async (req, res) => {
   const org = await Organization.findById(req.auth!.orgId).select('credits plan planRenewsAt');

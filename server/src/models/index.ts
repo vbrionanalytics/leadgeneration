@@ -75,7 +75,8 @@ const SearchJobSchema = new Schema(
       city: String,
       country: { type: String, required: true },
       keywords: String,
-      maxResults: { type: Number, default: 20 }
+      maxResults: { type: Number, default: 20 },
+      provider: { type: String, enum: ['google_places', 'openstreetmap'], default: 'openstreetmap' }
     },
     autoAnalyze: { type: Boolean, default: false },
     status: { type: String, enum: ['queued', 'running', 'completed', 'failed', 'cancelled'], default: 'queued', index: true },
@@ -99,7 +100,7 @@ const ContactSchema = new Schema(
     value: { type: String, required: true },
     kind: { type: String, enum: ['generic_business', 'personal_named', 'unknown'], default: 'unknown' },
     // Where the contact was found. Never AI-generated.
-    source: { type: String, enum: ['google_places', 'website_public', 'manual', 'consent_form', 'marketplace'], required: true },
+    source: { type: String, enum: ['google_places', 'openstreetmap', 'website_public', 'manual', 'consent_form', 'marketplace'], required: true },
     sourceUrl: String,
     consentBasis: { type: String, enum: ['none', 'published_business_address', 'legitimate_interest', 'express_consent'], default: 'none' },
     foundAt: { type: Date, default: Date.now }
@@ -111,7 +112,7 @@ const LeadSchema = new Schema(
   {
     orgId: { type: ObjectId, ref: 'Organization', required: true, index: true },
     searchJobId: { type: ObjectId, ref: 'SearchJob' },
-    source: { type: String, enum: ['google_places', 'manual', 'import', 'marketplace'], required: true },
+    source: { type: String, enum: ['google_places', 'openstreetmap', 'manual', 'import', 'marketplace'], required: true },
     sourceId: String, // e.g. Google place_id (may be stored indefinitely per Places policy)
     name: { type: String, required: true },
     category: String,
@@ -124,6 +125,7 @@ const LeadSchema = new Schema(
     reviewCount: Number,
     location: { lat: Number, lng: Number },
     googleMapsUrl: String,
+    listingUrl: String, // OpenStreetMap or other public listing page
     businessStatus: String,
     placesFetchedAt: Date, // used to purge/refresh Places content after PLACES_CACHE_DAYS
     dedupeKeys: { type: [String], index: true },
@@ -191,7 +193,7 @@ const EmailSchema = new Schema(
     firstOpenedAt: Date,
     repliedAt: Date,
     error: String,
-    generatedBy: { type: String, enum: ['ai', 'manual'], default: 'ai' }
+    generatedBy: { type: String, enum: ['ai', 'template', 'manual'], default: 'ai' }
   },
   ts
 );

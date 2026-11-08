@@ -101,6 +101,8 @@ env_set "$S" RUN_WORKER false
 env_default "$S" MONGODB_URI "mongodb://127.0.0.1:27017/ai_leadgen"
 env_default "$S" PLATFORM_ADMIN_EMAILS "$ADMIN_EMAIL"
 env_default "$S" AUTOMATION_MODE n8n
+env_default "$S" AI_ENABLED false
+env_default "$S" GOOGLE_PLACES_ENABLED false
 env_default "$S" JWT_SECRET "$(rand 32)"
 env_default "$S" ENCRYPTION_KEY "$(rand 32)"
 env_default "$S" N8N_WEBHOOK_SECRET "$(rand 32)"
@@ -198,10 +200,11 @@ cat <<EOF
   2. Header Auth  "LeadGen Analyzer Token"
        Name:  Authorization
        Value: Bearer $(env_get "$S" ANALYZER_TOKEN)
-  3. Header Auth  "Google Places API Key"
-       Name:  X-Goog-Api-Key
-       Value: <your Google Cloud key with Places API (New) enabled>
-  4. Gmail OAuth2 "Gmail (outreach sender)"  → sign in with the sending mailbox
+  3. Gmail OAuth2 "Gmail (outreach sender)"  → sign in with the sending mailbox
+  Optional, paid:
+  4. Header Auth  "Google Places API Key" (Name: X-Goog-Api-Key), then set GOOGLE_PLACES_ENABLED=true in server/.env
+  5. Add Anthropic credits, then set AI_ENABLED=true in server/.env for Claude scores and drafts
+  Re-run this script after editing server/.env.
 
   Then open each "AI LeadGen" workflow, pick these credentials on the nodes marked with a warning, and publish.
   Sign up at $BASE with $(env_get "$S" PLATFORM_ADMIN_EMAILS | cut -d, -f1) to get the admin dashboard.

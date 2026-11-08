@@ -31,6 +31,19 @@ Browser ──► Nginx ──► /api ──► Express API ──► MongoDB
 
 `AUTOMATION_MODE=direct` runs the same five steps inside the API process without n8n, using the same pipeline code. Use it for local development or as a fallback.
 
+## Free mode (default) and paid upgrades
+
+| | Free mode (default) | Paid upgrade |
+|---|---|---|
+| Discovery | OpenStreetMap via Overpass. Needs a city. | Google Places: add the n8n credential and set `GOOGLE_PLACES_ENABLED=true` |
+| Lead scoring | Transparent rules; every point tied to an observed fact | Claude: set `AI_ENABLED=true` and add Anthropic credits |
+| Email drafts | Templates written from each lead's evidence, instant, 0 credits | Claude-written drafts (1 credit each) |
+| Sending | Gmail via workflow 4, after your approval | Same |
+
+Users pick the source on the search page. OpenStreetMap results carry the required "© OpenStreetMap contributors (ODbL)" attribution in the app and in Excel exports.
+
+The public Overpass servers are shared and sometimes refuse queries ("at capacity"). Workflow 1 and direct mode try `overpass-api.de` first, then `overpass.kumi.systems`. For heavy automated use, run your own Overpass instance and set `OVERPASS_URL` (direct mode) or the URL in workflow 1.
+
 ## Built-in rules (not optional)
 
 - **No fabricated data.** Contacts come only from the Google listing, the business's own website (with the page URL stored), manual entry with a source, or recorded consent. The AI never produces contacts.
@@ -65,7 +78,7 @@ cd ../web && npm install && npm run dev   # http://localhost:5173 (proxies /api)
 Tests:
 
 ```bash
-cd server && npx vitest run         # 22 integration tests (needs MongoDB on 27017)
+cd server && npx vitest run         # 34 tests incl. Free mode (needs MongoDB on 27017)
 cd analyzer && .venv/bin/pip install -r requirements-dev.txt && .venv/bin/pytest -q
 ```
 

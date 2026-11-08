@@ -52,6 +52,14 @@ def test_blocks_internal_hosts():
     assert r["ok"] is False
 
 
+def test_reports_dead_domain(monkeypatch):
+    def nx(h):
+        raise main.DomainNotFound(f"Domain does not resolve (ENOTFOUND {h})")
+    monkeypatch.setattr(main, "_is_public_host", nx)
+    r = TestClient(app).post("/analyze", json={"url": "gone.test"}).json()
+    assert r["ok"] is False and "ENOTFOUND" in r["error"]
+
+
 def test_rejects_bad_scheme():
     r = TestClient(app).post("/analyze", json={"url": "ftp://x.test"}).json()
     assert r["ok"] is False

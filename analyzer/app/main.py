@@ -42,12 +42,16 @@ class AnalyzeRequest(BaseModel):
 
 
 # --------------------------------------------------------------------------- safety
+class DomainNotFound(Exception):
+    pass
+
+
 def _is_public_host(host: str) -> bool:
     """Block SSRF to internal networks: every resolved address must be public."""
     try:
         infos = socket.getaddrinfo(host, None)
     except socket.gaierror:
-        return False
+        raise DomainNotFound(f"Domain does not resolve (ENOTFOUND {host})")
     for info in infos:
         ip = ipaddress.ip_address(info[4][0])
         if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast or ip.is_unspecified:
@@ -67,7 +71,7 @@ def normalize_url(raw: str) -> str:
 
 # --------------------------------------------------------------------------- extraction
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,24}")
-BAD_EMAIL = re.compile(r"\.(png|jpe?g|gif|webp|svg|css|js)$|@(example\.|sentry|wixpress|domain\.com|email\.com)|^(u00|your|name@)", re.I)
+BAD_EMAIL = re.compile(r"\.(png|jpe?g|gif|webp|svg|css|js|con|cmo|comm|ocm|vom|xom)$|@(example\.|sentry|wixpress|domain\.com|email\.com)|^(u00|your|name@)", re.I)
 
 TECH_SIGNATURES = {
     "WordPress": [r"wp-content", r"wp-includes"],
@@ -241,7 +245,7 @@ async def analyse(url: str) -> dict:
             if not await f.allowed(url):
                 return {"ok": False, "url": url, "robots_allowed": False, "error": "Disallowed by robots.txt"}
             resp, load_ms = await f.get(url)
-        except PermissionError as e:
+        except (PermissionError, DomainNotFound) as e:
             return {"ok": False, "url": url, "error": str(e)}
         except httpx.HTTPError as e:
             # Retry over plain HTTP if HTTPS failed — itself a finding

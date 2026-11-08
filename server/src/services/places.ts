@@ -16,6 +16,11 @@ export interface DiscoveredPlace {
   location?: { lat: number; lng: number };
   googleMapsUrl?: string;
   businessStatus?: string;
+  /** Published business email (OpenStreetMap only; Google doesn't provide emails) */
+  email?: string;
+  /** Public listing page (e.g. openstreetmap.org/node/123) */
+  listingUrl?: string;
+  provider?: 'google_places' | 'openstreetmap';
 }
 
 export const PLACES_FIELD_MASK = [
@@ -46,7 +51,8 @@ export function mapPlace(p: any, fallbackCountry?: string): DiscoveredPlace | nu
     reviewCount: p.userRatingCount,
     location: p.location ? { lat: p.location.latitude, lng: p.location.longitude } : undefined,
     googleMapsUrl: p.googleMapsUri,
-    businessStatus: p.businessStatus
+    businessStatus: p.businessStatus,
+    provider: 'google_places'
   };
 }
 

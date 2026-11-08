@@ -160,6 +160,7 @@ export function heuristicScore(lead: LeadContext, a: WebsiteAnalysis | null, ser
 }
 
 export async function scoreLead(lead: LeadContext, analysis: WebsiteAnalysis | null, services: { name: string; description?: string }[], apiKey?: string): Promise<ScoreResult> {
+  if (!env.AI_ENABLED && !apiKey) return heuristicScore(lead, analysis, services);
   try {
     const raw = await askClaude(SCORING_SYSTEM, buildScoringInput(lead, analysis, services), 1500, apiKey);
     return { ...sanitizeScore(raw, services), scoredBy: 'claude' };

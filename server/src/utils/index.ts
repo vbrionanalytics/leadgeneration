@@ -77,5 +77,17 @@ export function dedupeKeys(lead: { sourceId?: string; website?: string; phone?: 
   return keys;
 }
 
+/** A listing's "website" that is really a map, social or directory page means the business has no site of its own. */
+export function isOwnWebsite(url?: string | null): boolean {
+  const d = normalizeDomain(url);
+  if (!d) return false;
+  return !/(^|\.)(goo\.gl|google\.[a-z.]+|g\.page|facebook\.com|fb\.me|instagram\.com|linkedin\.com|twitter\.com|x\.com|wa\.me|whatsapp\.com|justdial\.com|indiamart\.com|sulekha\.com|practo\.com|zomato\.com|swiggy\.com|tripadvisor\.[a-z.]+|booking\.com|linktr\.ee)$/.test(d);
+}
+
+/** Rejects syntactically broken emails and common top-level-domain typos (gmail.con, .cmo) that would bounce. */
+export function isUsableEmail(e: string): boolean {
+  return /^[^@\s]+@[^@\s]+\.[a-z]{2,24}$/i.test(e) && !/\.(con|cmo|comm|ocm|vom|xom|coom|nett?t)$/i.test(e);
+}
+
 export const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));

@@ -61,7 +61,7 @@ export default function Billing() {
       <div className="mb-3 flex flex-wrap gap-x-6 gap-y-1 text-sm text-ink-2">
         <span>New lead from search: <b className="text-ink">{p.costs.discoveredLead} credit</b></span>
         <span>Website analysis and score: <b className="text-ink">{p.costs.analysis} credits</b></span>
-        <span>AI email draft: <b className="text-ink">{p.costs.emailDraft} credit</b></span>
+        <span>Email draft: <b className="text-ink">{p.costs.emailDraft ? `${p.costs.emailDraft} credit` : 'free'}</b></span>
         <span>Duplicates and sending: <b className="text-ink">free</b></span>
       </div>
 

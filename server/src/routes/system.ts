@@ -10,6 +10,7 @@ import { audit } from '../services/integrations';
 import { applyReview, runMaintenance } from '../services/marketplace';
 import { applyAnalysis, failAnalysis, failSearchJob, ingestDiscoveryResults, markEmailResult, precheckSend, saveDraft } from '../services/pipeline';
 import { mapPlace } from '../services/places';
+import { selectOsmResults } from '../services/osm';
 import { badRequest, logger, notFound } from '../utils';
 
 // ============================================================ n8n → backend callbacks
@@ -19,13 +20,17 @@ n8nRouter.use(requireN8n);
 n8nRouter.get('/health', (_req, res) => res.json({ ok: true, service: 'ai-leadgen', time: new Date().toISOString() }));
 
 /** Workflow 1: discovery results. Accepts raw Places API objects or pre-normalised records. */
-n8nRouter.post('/discovery/:jobId/results', validate(z.object({ places: z.array(z.any()).max(500).default([]), final: z.boolean().default(true) })), asyncH(async (req, res) => {
+n8nRouter.post('/discovery/:jobId/results', validate(z.object({ places: z.array(z.any()).max(2000).default([]), final: z.boolean().default(true) })), asyncH(async (req, res) => {
   const job = await SearchJob.findById(req.params.jobId).select('query status');
   if (!job) throw notFound('Job not found');
   if (job.status === 'queued') await SearchJob.updateOne({ _id: job._id }, { $set: { status: 'running', startedAt: new Date() } });
-  const places = req.body.places
-    .map((p: any) => (p?.displayName ? mapPlace(p, job.query!.country) : p))
-    .filter((p: any) => p?.sourceId && p?.name && p.businessStatus !== 'CLOSED_PERMANENTLY');
+  const fallback = { city: job.query!.city, country: job.query!.country };
+  const isOsm = req.body.places.some((p: any) => p?.tags && p?.type);
+  const places = isOsm
+    ? selectOsmResults(req.body.places, fallback, job.query!.maxResults ?? 20)
+    : req.body.places
+        .map((p: any) => (p?.displayName ? mapPlace(p, job.query!.country) : p))
+        .filter((p: any) => p?.sourceId && p?.name && p.businessStatus !== 'CLOSED_PERMANENTLY');
   const result = await ingestDiscoveryResults(String(req.params.jobId), places, req.body.final);
   res.json(result);
 }));
@@ -43,7 +48,10 @@ n8nRouter.post('/analysis/:leadId', validate(z.object({ analysis: z.any().nullab
   const services = (org?.services || []).map((s: any) => ({ name: s.name, description: s.description }));
   const analysis = req.body.analysis && typeof req.body.analysis === 'object' ? req.body.analysis : null;
   let score: ScoreResult;
-  try {
+  if (req.body.score == null) {
+    // Free mode (or Claude unavailable): score with transparent rules, as designed
+    score = heuristicScore(lead.toObject() as any, analysis, services);
+  } else try {
     score = { ...sanitizeScore(typeof req.body.score === 'string' ? JSON.parse(req.body.score) : req.body.score, services), scoredBy: 'claude' };
   } catch (e: any) {
     logger.warn({ leadId: req.params.leadId, err: e.message }, 'Invalid AI score from n8n; using heuristic');
@@ -141,7 +149,7 @@ adminRouter.get('/overview', asyncH(async (_req, res) => {
   const plans: Record<string, number> = {};
   for (const o of planCounts) plans[o.plan] = (plans[o.plan] || 0) + 1;
   const mrr = Object.entries(plans).reduce((s, [p, n]) => s + (PLANS[p as PlanId]?.priceInrMonthly || 0) * n, 0);
-  res.json({ orgs, users, leads, emailsSent, searches, activeListings: listings, purchases, failedJobs, plans, mrrInr: mrr, automationMode: env.AUTOMATION_MODE });
+  res.json({ orgs, users, leads, emailsSent, searches, activeListings: listings, purchases, failedJobs, plans, mrrInr: mrr, automationMode: env.AUTOMATION_MODE, aiEnabled: env.AI_ENABLED, googlePlacesEnabled: env.GOOGLE_PLACES_ENABLED });
 }));
 
 adminRouter.get('/organizations', asyncH(async (_req, res) => {

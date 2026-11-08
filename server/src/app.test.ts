@@ -10,7 +10,8 @@ process.env.GOOGLE_PLACES_API_KEY = 'test-places-key';
 process.env.N8N_WEBHOOK_SECRET = 'n8n-shared-secret';
 process.env.ANALYZER_URL = 'http://analyzer.test';
 process.env.PLATFORM_ADMIN_EMAILS = 'admin@leadgen.test';
-delete process.env.ANTHROPIC_API_KEY; // forces transparent heuristic scoring
+delete process.env.ANTHROPIC_API_KEY; // AI on but no key: exercises the heuristic fallback
+process.env.AI_ENABLED = 'true';      // this suite covers the paid path (Google Places + AI drafts)
 
 const { createApp } = await import('./app');
 const { handlers } = await import('./jobs/worker');
@@ -80,7 +81,7 @@ describe('discovery, dedupe, analysis', () => {
   let leadAId = '';
   it('runs a search job in the background and dedupes', async () => {
     await request(app).patch('/api/org').set(auth()).send({ services: [{ name: 'Website Redesign' }, { name: 'SEO Optimisation' }, { name: 'Mobile App' }] }).expect(200);
-    const r = await request(app).post('/api/searches').set(auth()).send({ category: 'dentist', country: 'IN', city: 'Coimbatore', maxResults: 20 });
+    const r = await request(app).post('/api/searches').set(auth()).send({ category: 'dentist', country: 'IN', city: 'Coimbatore', maxResults: 20, provider: 'google_places' });
     expect(r.status).toBe(202);
     await drain();
     const job = (await request(app).get(`/api/searches/${r.body._id}`).set(auth())).body;
@@ -91,7 +92,7 @@ describe('discovery, dedupe, analysis', () => {
     expect(bal.credits).toBe(48);
   });
   it('a repeated search creates no duplicates', async () => {
-    const r = await request(app).post('/api/searches').set(auth()).send({ category: 'dentist', country: 'IN', city: 'Coimbatore', maxResults: 20 });
+    const r = await request(app).post('/api/searches').set(auth()).send({ category: 'dentist', country: 'IN', city: 'Coimbatore', maxResults: 20, provider: 'google_places' });
     await drain();
     const job = (await request(app).get(`/api/searches/${r.body._id}`).set(auth())).body;
     expect(job.stats.created).toBe(0);

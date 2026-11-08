@@ -27,7 +27,7 @@ export default function Outreach() {
 
   return (
     <>
-      <PageHeader title="Outreach" sub="AI writes the drafts. Nothing is sent until you read and approve each one. Every email carries your address and a working unsubscribe link." />
+      <PageHeader title="Outreach" sub="Drafts are written for you from each lead’s evidence. Nothing is sent until you read and approve each one. Every email carries your address and a working unsubscribe link." />
       <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-5">
         <Stat label="To approve" value={s.pending ?? 0} />
         <Stat label="Sent" value={s.sent ?? 0} />
@@ -98,14 +98,16 @@ function EmailEditor({ email, onChange }: { email: EmailMsg; onChange: () => voi
         </div>
       )}
       {email.status === 'generating' ? (
-        <p className="flex items-center gap-2 py-10 text-ink-2"><Spinner /> Claude is writing this draft from the lead's evidence…</p>
+        <p className="flex items-center gap-2 py-10 text-ink-2"><Spinner /> Writing this draft from the lead's evidence…</p>
       ) : (
         <>
           <label className="label" htmlFor="subj">Subject</label>
           <input id="subj" className="input mb-3" disabled={!editable} value={subject} onChange={(e) => setSubject(e.target.value)} />
           <label className="label" htmlFor="body">Message</label>
           <textarea id="body" className="input min-h-64 leading-relaxed" disabled={!editable} value={body} onChange={(e) => setBody(e.target.value)} />
-          <p className="mt-1 text-xs text-ink-2">{words} words. Your signature, business address and an unsubscribe link are added automatically.</p>
+          <p className="mt-1 text-xs text-ink-2">
+            {words} words.{email.generatedBy === 'template' ? ' Written from this lead’s evidence using a template; edit it freely before approving.' : ''} Your signature, business address and an unsubscribe link are added automatically.
+          </p>
           {email.error && <p className="mt-2 text-sm text-red-700">{email.error}</p>}
           {email.status === 'sent' && (
             <p className="mt-3 text-sm text-ink-2">Sent {fmtTime(email.sentAt)}. Opened {email.opens} time(s).{email.repliedAt ? ' Replied.' : ''}</p>

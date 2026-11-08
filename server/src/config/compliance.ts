@@ -23,8 +23,8 @@ const STANDARD = { requiresPhysicalAddress: true, requiresUnsubscribe: true };
 export const COUNTRY_RULES: Record<string, CountryRule> = {
   IN: {
     code: 'IN', name: 'India', law: 'DPDP Act 2023 / IT Act', ...STANDARD, unsubscribeHonorDays: 7,
-    coldEmailBasis: { generic_business: 'published_business_address', personal_named: 'legitimate_interest', unknown: 'published_business_address' },
-    notes: 'Identify sender, honour opt-outs promptly, process only publicly published business contact data.'
+    coldEmailBasis: { generic_business: 'published_business_address', personal_named: 'published_business_address', unknown: 'published_business_address' },
+    notes: 'DPDP s.3(c)(ii) excludes personal data the person made public themselves (e.g. an email a business publishes on its own site or listing). Use only such published contacts, identify the sender and honour opt-outs promptly.'
   },
   US: {
     code: 'US', name: 'United States', law: 'CAN-SPAM Act', ...STANDARD, unsubscribeHonorDays: 10,

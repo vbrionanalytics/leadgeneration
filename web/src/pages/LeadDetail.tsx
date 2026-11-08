@@ -6,7 +6,7 @@ import { api, errMsg, Lead } from '../lib/api';
 import { Alert, Loading, Modal, ScoreRing, Spinner, StatusChip, TempChip, fmtDate } from '../components/ui';
 
 const BREAKDOWN_LABELS: Record<string, string> = { need: 'Need for your services', ability_to_pay: 'Ability to pay', reachability: 'Reachability', fit: 'Fit with your offer' };
-const SOURCE_LABELS: Record<string, string> = { website_public: 'Published on their website', google_places: 'Google listing', manual: 'Added manually', consent_form: 'Consent on record', marketplace: 'Bought on marketplace' };
+const SOURCE_LABELS: Record<string, string> = { website_public: 'Published on their website', google_places: 'Google listing', openstreetmap: 'OpenStreetMap listing', manual: 'Added manually', consent_form: 'Consent on record', marketplace: 'Bought on marketplace' };
 
 export default function LeadDetail() {
   const { id } = useParams();
@@ -25,7 +25,7 @@ export default function LeadDetail() {
   const analyse = useMutation({ mutationFn: async () => api.post('/leads/analyze', { leadIds: [id] }), onSuccess: refresh, onError: (e) => setErr(errMsg(e)) });
   const draft = useMutation({
     mutationFn: async () => (await api.post('/emails/generate', { leadIds: [id] })).data,
-    onSuccess: (d) => { const r = d.results[0]; r.error ? setErr(r.error) : setOk('Draft is being written. Review and approve it in Outreach.'); refresh(); },
+    onSuccess: (d) => { const r = d.results[0]; r.error ? setErr(r.error) : setOk('Draft is ready. Review and approve it in Outreach.'); refresh(); },
     onError: (e) => setErr(errMsg(e))
   });
   const delContact = useMutation({ mutationFn: async (cid: string) => api.delete(`/leads/${id}/contacts/${cid}`), onSuccess: refresh });
@@ -47,6 +47,7 @@ export default function LeadDetail() {
           <div className="mt-2 flex flex-wrap gap-3 text-sm">
             {l.website && <a href={l.website} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-semibold text-brand hover:underline">Website <ExternalLink className="h-3.5 w-3.5" /></a>}
             {l.googleMapsUrl && <a href={l.googleMapsUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-semibold text-brand hover:underline">Google Maps <ExternalLink className="h-3.5 w-3.5" /></a>}
+            {l.listingUrl && <a href={l.listingUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-semibold text-brand hover:underline">OpenStreetMap <ExternalLink className="h-3.5 w-3.5" /></a>}
             {l.rating != null && <span className="text-ink-2">{l.rating} stars from {l.reviewCount} reviews</span>}
           </div>
         </div>
@@ -153,7 +154,8 @@ export default function LeadDetail() {
               </select>
             </div>
             <div><label className="label" htmlFor="notes">Notes</label><textarea id="notes" className="input min-h-24" defaultValue={l.notes} onBlur={(e) => e.target.value !== (l.notes || '') && patch.mutate({ notes: e.target.value })} /></div>
-            <p className="text-xs text-ink-2">Added {fmtDate(l.createdAt)} from {l.source.replace('_', ' ')}. <StatusChip status={l.analysisStatus} /></p>
+            <p className="text-xs text-ink-2">Added {fmtDate(l.createdAt)} from {l.source === 'openstreetmap' ? 'OpenStreetMap' : l.source.replace('_', ' ')}. <StatusChip status={l.analysisStatus} /></p>
+            {l.source === 'openstreetmap' && <p className="text-xs text-ink-2">Listing data © OpenStreetMap contributors (ODbL).</p>}
           </section>
         </aside>
       </div>

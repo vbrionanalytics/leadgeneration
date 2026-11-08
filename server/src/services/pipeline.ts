@@ -6,13 +6,15 @@
 import { Types } from 'mongoose';
 import { CREDIT_COSTS } from '../config/plans';
 import { Campaign, Email, Lead, Organization, SearchJob, LeadDoc } from '../models';
-import { badRequest, dedupeKeys, logger, notFound, randomToken } from '../utils';
+import { badRequest, dedupeKeys, isOwnWebsite, isUsableEmail, logger, notFound, randomToken } from '../utils';
 import { classifyEmail, deriveBasis, assessOutreach } from './compliance';
 import { reserveUpTo, settleReservation, spendCredits } from './credits';
 import type { DiscoveredPlace } from './places';
 import { ScoreResult, WebsiteAnalysis } from './ai';
 import { enqueue } from './queue';
 import { renderEmail } from './email';
+import { templateEmail } from './templates';
+import { env } from '../config/env';
 
 // ============================================================ Discovery
 export async function ingestDiscoveryResults(jobId: string, places: DiscoveredPlace[], final: boolean) {
@@ -42,13 +44,27 @@ export async function ingestDiscoveryResults(jobId: string, places: DiscoveredPl
   const reserved = await reserveUpTo(orgId, fresh.length * CREDIT_COSTS.discoveredLead);
   const toCreate = fresh.slice(0, Math.floor(reserved / CREDIT_COSTS.discoveredLead));
   const now = new Date();
-  const docs = toCreate.map((p) => ({
-    orgId, searchJobId: job._id, source: 'google_places', sourceId: p.sourceId, name: p.name, category: p.category || job.query!.category,
-    address: p.address, city: p.city || job.query!.city, country: (p.country || job.query!.country || '').toUpperCase(), phone: p.phone,
-    website: p.website, rating: p.rating, reviewCount: p.reviewCount, location: p.location, googleMapsUrl: p.googleMapsUrl,
-    businessStatus: p.businessStatus, placesFetchedAt: now, dedupeKeys: p.keys,
-    contacts: p.phone ? [{ type: 'phone', value: p.phone, kind: 'generic_business', source: 'google_places', consentBasis: 'published_business_address' }] : []
-  }));
+  const org = await Organization.findById(orgId).select('compliance');
+  const li = !!org?.compliance?.legitimateInterestAssessed;
+  const docs = toCreate.map((p) => {
+    const source = p.provider === 'openstreetmap' ? 'openstreetmap' : 'google_places';
+    const contacts: any[] = [];
+    if (p.phone) contacts.push({ type: 'phone', value: p.phone, kind: 'generic_business', source, sourceUrl: p.listingUrl, consentBasis: 'published_business_address' });
+    // Only OpenStreetMap carries emails, and only ones the business listing publishes
+    if (p.email && isUsableEmail(p.email)) {
+      const kind = classifyEmail(p.email);
+      contacts.push({ type: 'email', value: p.email, kind, source, sourceUrl: p.listingUrl, consentBasis: deriveBasis(source, kind, li) });
+    }
+    return {
+      orgId, searchJobId: job._id, source, sourceId: p.sourceId, name: p.name, category: p.category || job.query!.category,
+      address: p.address, city: p.city || job.query!.city, country: (p.country || job.query!.country || '').toUpperCase(), phone: p.phone,
+      website: isOwnWebsite(p.website) ? p.website : undefined, rating: p.rating, reviewCount: p.reviewCount, location: p.location, googleMapsUrl: p.googleMapsUrl,
+      listingUrl: p.listingUrl, businessStatus: p.businessStatus,
+      // Google content must be refreshed or purged after the cache window; OSM data has no such limit
+      placesFetchedAt: source === 'google_places' ? now : undefined,
+      dedupeKeys: p.keys, contacts
+    };
+  });
   const created = docs.length ? await Lead.insertMany(docs) : [];
   await settleReservation(orgId, reserved, created.length * CREDIT_COSTS.discoveredLead, `Discovery: ${created.length} new leads`, String(job._id));
 
@@ -121,7 +137,7 @@ export async function applyAnalysis(leadId: string, analysis: WebsiteAnalysis | 
   const known = new Set(lead.contacts.map((c: any) => `${c.type}:${c.value.toLowerCase()}`));
   for (const e of analysis?.emails ?? []) {
     const value = e.value.toLowerCase();
-    if (known.has(`email:${value}`)) continue;
+    if (known.has(`email:${value}`) || !isUsableEmail(value)) continue;
     const kind = classifyEmail(value);
     lead.contacts.push({ type: 'email', value, kind, source: 'website_public', sourceUrl: e.page, consentBasis: deriveBasis('website_public', kind, li) } as any);
     known.add(`email:${value}`);
@@ -147,6 +163,21 @@ export async function createEmailDraft(opts: { orgId: Types.ObjectId | string; l
   });
   const existing = await Email.findOne({ orgId: opts.orgId, leadId: lead._id, to: contact.value, status: { $in: ['generating', 'pending_approval', 'approved', 'queued'] } });
   if (existing) return existing;
+
+  if (!env.AI_ENABLED) {
+    // Free mode: write the draft from the lead's evidence right away. No AI, no credits.
+    const campaign = opts.campaignId ? await Campaign.findOne({ _id: opts.campaignId, orgId: opts.orgId }).lean() : null;
+    const t = templateEmail({
+      lead: lead.toObject() as any, evidence: lead.evidence as any, opportunities: lead.opportunities as any, recommended: lead.recommendedServices as any,
+      sender: { name: org?.sender?.name, company: org?.sender?.companyName }, campaign
+    });
+    return Email.create({
+      orgId: opts.orgId, leadId: lead._id, campaignId: opts.campaignId, to: contact.value, contactId: contact._id,
+      subject: t.subject, body: t.body, status: 'pending_approval', compliance: comp, generatedBy: 'template',
+      trackingId: randomToken(16), unsubscribeToken: randomToken(18)
+    });
+  }
+
   await spendCredits(opts.orgId, CREDIT_COSTS.emailDraft, `Email draft: ${lead.name}`, String(lead._id));
   const email = await Email.create({
     orgId: opts.orgId, leadId: lead._id, campaignId: opts.campaignId, to: contact.value, contactId: contact._id,

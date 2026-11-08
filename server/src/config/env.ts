@@ -16,12 +16,15 @@ const schema = z.object({
   JWT_EXPIRES_IN: z.string().default('7d'),
   ENCRYPTION_KEY: z.string().min(32, 'ENCRYPTION_KEY must be at least 32 chars'),
 
-  // AI
+  // AI. When false the platform runs free: rule-based scores and template email drafts.
+  AI_ENABLED: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
   ANTHROPIC_API_KEY: z.string().optional(),
   CLAUDE_MODEL: z.string().default('claude-sonnet-5-5'),
 
   // Discovery
   GOOGLE_PLACES_API_KEY: z.string().optional(),
+  /** n8n mode: set true once workflow 1 has a Google Places credential. Direct mode: a key enables it. */
+  GOOGLE_PLACES_ENABLED: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
   PLACES_CACHE_DAYS: z.coerce.number().default(30),
 
   // Website analyzer (FastAPI)

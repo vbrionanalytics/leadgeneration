@@ -12,6 +12,7 @@ import { analyzeWebsite, dispatchToN8n } from '../services/integrations';
 import { applyReview, reviewPreview, runMaintenance } from '../services/marketplace';
 import { applyAnalysis, draftContext, failAnalysis, failSearchJob, ingestDiscoveryResults, markEmailResult, precheckSend, saveDraft } from '../services/pipeline';
 import { PLACES_MAX_PER_QUERY, searchPlaces } from '../services/places';
+import { buildOverpassQuery, searchOsm } from '../services/osm';
 import { Handler, JobType, PermanentError, enqueue, runNext } from '../services/queue';
 import { decrypt, logger, sleep } from '../utils';
 
@@ -29,9 +30,20 @@ const discovery: Handler = async ({ jobId }) => {
   const subQueries = q.maxResults! > PLACES_MAX_PER_QUERY
     ? ['', 'best', 'top rated', 'near city centre', 'new', 'affordable', 'premium', 'local'].slice(0, Math.ceil(q.maxResults! / PLACES_MAX_PER_QUERY))
     : [''];
+  const provider = q.provider || 'openstreetmap';
+  if (provider === 'openstreetmap') {
+    const overpassQuery = buildOverpassQuery({ category: q.category, city: q.city, country: q.country, keywords: q.keywords });
+    if (n8n()) {
+      await dispatchToN8n('discovery', { jobId, orgId: String(job.orgId), provider, overpassQuery, maxResults: q.maxResults });
+      return;
+    }
+    const places = await searchOsm({ category: q.category, city: q.city, country: q.country, keywords: q.keywords, max: q.maxResults! });
+    await ingestDiscoveryResults(jobId, places, true);
+    return;
+  }
   if (n8n()) {
     await dispatchToN8n('discovery', {
-      jobId, orgId: String(job.orgId), category: q.category, city: q.city || '', country: q.country,
+      jobId, orgId: String(job.orgId), provider, category: q.category, city: q.city || '', country: q.country,
       keywords: q.keywords || '', maxResults: q.maxResults, subQueries
     });
     return;
@@ -60,7 +72,8 @@ const analysis: Handler = async ({ leadId }) => {
   const services = (org?.services || []).map((s: any) => ({ name: s.name, description: s.description }));
   const ctx = { name: lead.name, category: lead.category ?? undefined, city: lead.city ?? undefined, country: lead.country ?? undefined, website: lead.website ?? undefined, rating: lead.rating ?? undefined, reviewCount: lead.reviewCount ?? undefined, businessStatus: lead.businessStatus ?? undefined };
   if (n8n()) {
-    await dispatchToN8n('analysis', { leadId, orgId: String(lead.orgId), lead: ctx, services, analyzerUrl: env.ANALYZER_PUBLIC_URL || env.ANALYZER_URL });
+    // useAi=false makes workflow 2 skip Claude; the backend then scores with transparent rules
+    await dispatchToN8n('analysis', { leadId, orgId: String(lead.orgId), lead: ctx, services, analyzerUrl: env.ANALYZER_PUBLIC_URL || env.ANALYZER_URL, useAi: env.AI_ENABLED });
     return;
   }
   const a = lead.website ? await analyzeWebsite(lead.website) : null;

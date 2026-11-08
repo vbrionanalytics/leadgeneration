@@ -9,6 +9,9 @@ import { audit } from '../services/integrations';
 import { requestAnalysis } from '../services/pipeline';
 import { enqueue } from '../services/queue';
 import { badRequest, escapeRegex, notFound } from '../utils';
+import { env } from '../config/env';
+
+const googleAvailable = () => env.GOOGLE_PLACES_ENABLED || (env.AUTOMATION_MODE === 'direct' && !!env.GOOGLE_PLACES_API_KEY);
 import { Types } from 'mongoose';
 
 // ============================================================ Search jobs
@@ -20,8 +23,11 @@ searchRouter.post('/', requireScope('search:write'), validate(z.object({
   city: z.string().max(80).optional(),
   keywords: z.string().max(80).optional(),
   maxResults: z.number().int().min(1).max(500).default(20),
-  autoAnalyze: z.boolean().default(false)
+  autoAnalyze: z.boolean().default(false),
+  provider: z.enum(['openstreetmap', 'google_places']).default('openstreetmap')
 })), asyncH(async (req, res) => {
+  if (req.body.provider === 'google_places' && !googleAvailable()) throw badRequest('Google Places isn\'t set up yet. Use OpenStreetMap (free) or ask your admin to add a Google Places key.');
+  if (req.body.provider === 'openstreetmap' && !req.body.city) throw badRequest('Enter a city to search OpenStreetMap.');
   const org = await Organization.findById(req.auth!.orgId);
   const plan = PLANS[org!.plan as PlanId];
   if (req.body.maxResults > plan.maxResultsPerSearch) throw badRequest(`Your plan allows up to ${plan.maxResultsPerSearch} results per search.`);
@@ -35,6 +41,16 @@ searchRouter.post('/', requireScope('search:write'), validate(z.object({
   await audit('search.create', { orgId: req.auth!.orgId, userId: req.auth!.userId, target: String(job._id), meta: query, req });
   res.status(202).json(job);
 }));
+
+searchRouter.get('/providers', (_req, res) => {
+  res.json({
+    providers: [
+      { id: 'openstreetmap', name: 'OpenStreetMap', free: true, available: true, note: 'Free. Coverage depends on local mapping; best in larger cities.' },
+      { id: 'google_places', name: 'Google Places', free: false, available: googleAvailable(), note: 'Most complete business data. Billed per search by Google.' }
+    ],
+    aiEnabled: env.AI_ENABLED
+  });
+});
 
 searchRouter.get('/', asyncH(async (req, res) => {
   res.json(await SearchJob.find({ orgId: req.auth!.orgId }).sort({ createdAt: -1 }).limit(50));
@@ -133,19 +149,23 @@ leadsRouter.get('/export', requireScope('leads:read'), validate(listQuery.omit({
     { header: 'Website', key: 'website', width: 30 }, { header: 'Phone', key: 'phone', width: 18 }, { header: 'Emails', key: 'emails', width: 32 },
     { header: 'Email source', key: 'emailSource', width: 34 }, { header: 'Top opportunities', key: 'opps', width: 44 },
     { header: 'Recommended services', key: 'services', width: 34 }, { header: 'Score summary', key: 'summary', width: 50 },
-    { header: 'Scored by', key: 'scoredBy', width: 10 }, { header: 'Google Maps', key: 'maps', width: 30 }, { header: 'Added', key: 'createdAt', width: 12 }
+    { header: 'Scored by', key: 'scoredBy', width: 10 }, { header: 'Listing', key: 'maps', width: 34 }, { header: 'Source', key: 'source', width: 14 }, { header: 'Added', key: 'createdAt', width: 12 }
   ];
   for (const l of leads as any[]) {
     const emails = (l.contacts || []).filter((c: any) => c.type === 'email');
     ws.addRow({
       ...l, emails: emails.map((e: any) => e.value).join(', '), emailSource: emails.map((e: any) => e.sourceUrl || e.source).join(', '),
       opps: (l.opportunities || []).map((o: any) => o.title).join('; '), services: (l.recommendedServices || []).map((s: any) => s.name).join('; '),
-      summary: l.scoreSummary, maps: l.googleMapsUrl, createdAt: new Date(l.createdAt)
+      summary: l.scoreSummary, maps: l.googleMapsUrl || l.listingUrl, source: l.source === 'openstreetmap' ? 'OpenStreetMap' : l.source === 'google_places' ? 'Google Places' : l.source, createdAt: new Date(l.createdAt)
     });
   }
   ws.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
   ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } };
-  ws.autoFilter = { from: 'A1', to: 'P1' };
+  ws.autoFilter = { from: 'A1', to: 'Q1' };
+  if ((leads as any[]).some((x) => x.source === 'openstreetmap')) {
+    ws.addRow([]);
+    ws.addRow(['Business data from OpenStreetMap: © OpenStreetMap contributors, available under the Open Database Licence (ODbL).']);
+  }
   await audit('leads.export', { orgId: req.auth!.orgId, userId: req.auth!.userId, meta: { count: leads.length }, req });
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.setHeader('Content-Disposition', `attachment; filename="leads-${new Date().toISOString().slice(0, 10)}.xlsx"`);

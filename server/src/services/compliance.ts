@@ -20,7 +20,7 @@ export function classifyEmail(email: string): ContactKind {
  */
 export function deriveBasis(source: string, kind: ContactKind, liAssessed: boolean): ConsentBasis {
   if (source === 'consent_form') return 'express_consent';
-  if (source === 'website_public' || source === 'google_places') {
+  if (source === 'website_public' || source === 'google_places' || source === 'openstreetmap') {
     if (kind === 'generic_business' && liAssessed) return 'legitimate_interest';
     return 'published_business_address';
   }
@@ -67,7 +67,7 @@ export async function assessOutreach(i: ComplianceInput): Promise<ComplianceResu
   if (sup) reasons.push(`Recipient is on the suppression list (${sup}).`);
   if (!i.sender?.email || !i.sender?.name) reasons.push('Sender name and email are not configured in Settings.');
   if (rule.requiresPhysicalAddress && !i.sender?.postalAddress) reasons.push(`${rule.law} requires a physical postal address in the footer; add it in Settings.`);
-  if (!['website_public', 'google_places', 'consent_form', 'manual', 'marketplace'].includes(i.contactSource)) reasons.push('Contact has no verified source.');
+  if (!['website_public', 'google_places', 'openstreetmap', 'consent_form', 'manual', 'marketplace'].includes(i.contactSource)) reasons.push('Contact has no verified source.');
   if (!basisSatisfies(basis, need)) {
     reasons.push(
       need === 'express_consent'

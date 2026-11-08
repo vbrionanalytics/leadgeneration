@@ -34,7 +34,7 @@ export function errMsg(e: unknown): string {
 export interface Contact { _id: string; type: string; value: string; kind: string; source: string; sourceUrl?: string; consentBasis: string }
 export interface Lead {
   _id: string; name: string; category?: string; address?: string; city?: string; country?: string; phone?: string; website?: string;
-  rating?: number; reviewCount?: number; googleMapsUrl?: string; status: string; analysisStatus: string; score?: number;
+  rating?: number; reviewCount?: number; googleMapsUrl?: string; listingUrl?: string; status: string; analysisStatus: string; score?: number;
   scoreBreakdown?: Record<string, number>; scoreSummary?: string; scoredBy?: string;
   evidence?: { signal: string; detail: string; source: string; impact: number }[];
   opportunities?: { title: string; description: string; priority: string }[];
@@ -51,7 +51,7 @@ export interface Org {
 export interface User { id: string; name: string; email: string; role: string; isPlatformAdmin: boolean }
 export interface EmailMsg {
   _id: string; leadId: any; to: string; subject: string; body: string; status: string; compliance?: { allowed: boolean; reasons: string[]; law: string; country: string };
-  opens: number; clicks: number; sentAt?: string; createdAt: string; error?: string; repliedAt?: string; campaignId?: string;
+  opens: number; clicks: number; sentAt?: string; createdAt: string; error?: string; repliedAt?: string; campaignId?: string; generatedBy?: string;
 }
 
 export const COUNTRIES: [string, string][] = [
