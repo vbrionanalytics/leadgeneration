@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
-# AI LeadGen — one-command installer for an Ubuntu 22.04/24.04 VPS.
+# AI LeadGen — one-command installer for an Ubuntu 22.04 / 24.04 / 26.04 VPS.
 #
 #   sudo bash deploy/install.sh [domain]          (default domain: leadgen.dealpost.co.in)
+#
+# Without n8n (everything runs inside the app):
+#   sudo AUTOMATION_MODE=direct ADMIN_EMAIL=you@company.com bash deploy/install.sh leadgen.company.com
 #
 # Safe to re-run: existing .env files and secrets are kept, code is rebuilt, processes reloaded.
 # Flags (env vars):
@@ -12,6 +15,7 @@ set -Eeuo pipefail
 
 DOMAIN="${1:-${DOMAIN:-leadgen.dealpost.co.in}}"
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ADMIN_EMAIL_SET=${ADMIN_EMAIL:+1}
 ADMIN_EMAIL="${ADMIN_EMAIL:-prawinkumar2k4@gmail.com}"
 CERT_EMAIL="${CERT_EMAIL:-$ADMIN_EMAIL}"
 N8N_URL="${N8N_URL:-https://n8n.dealpost.co.in}"
@@ -57,10 +61,16 @@ if [[ "${SKIP_SYSTEM:-0}" != 1 ]]; then
   apt-get install -y -qq curl ca-certificates gnupg openssl python3 python3-venv python3-pip build-essential >/dev/null
   ok "base packages"
 
-  if ! command -v node >/dev/null || [[ $(node -v | cut -d. -f1 | tr -d v) -lt 20 ]]; then
-    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - >/dev/null
-    apt-get install -y -qq nodejs >/dev/null
+  node_ok() { command -v node >/dev/null && [[ $(node -v | cut -d. -f1 | tr -d v) -ge 20 ]]; }
+  if ! node_ok; then
+    # NodeSource first; on a release it doesn't support yet, Ubuntu's own packages
+    if ! { curl -fsSL https://deb.nodesource.com/setup_22.x | bash - >/dev/null 2>&1 && apt-get install -y -qq nodejs >/dev/null 2>&1; } || ! node_ok; then
+      warn "NodeSource unavailable for this Ubuntu release; using Ubuntu's nodejs package"
+      rm -f /etc/apt/sources.list.d/nodesource.list
+      apt-get update -qq && apt-get install -y -qq nodejs npm >/dev/null
+    fi
   fi
+  node_ok || die "Node.js 20+ is required but could not be installed (found: $(node -v 2>/dev/null || echo none))"
   ok "Node $(node -v)"
 
   command -v pm2 >/dev/null || npm i -g pm2 >/dev/null 2>&1
@@ -68,9 +78,16 @@ if [[ "${SKIP_SYSTEM:-0}" != 1 ]]; then
 
   if ! command -v mongod >/dev/null && ! (ss -ltn | grep -q ':27017 '); then
     . /etc/os-release
+    codename=$VERSION_CODENAME
+    # MongoDB publishes packages for new LTS releases months after they ship; fall back to 24.04 (noble) packages
+    if ! curl -fsI "https://repo.mongodb.org/apt/ubuntu/dists/${codename}/mongodb-org/8.0/Release" >/dev/null 2>&1; then
+      warn "No MongoDB packages for Ubuntu ${codename} yet; using the 24.04 (noble) packages"
+      codename=noble
+    fi
     curl -fsSL https://www.mongodb.org/static/pgp/server-8.0.asc | gpg --dearmor -o /usr/share/keyrings/mongodb-server-8.0.gpg --yes
-    echo "deb [ signed-by=/usr/share/keyrings/mongodb-server-8.0.gpg ] https://repo.mongodb.org/apt/ubuntu ${VERSION_CODENAME}/mongodb-org/8.0 multiverse" > /etc/apt/sources.list.d/mongodb-org-8.0.list
-    apt-get update -qq && apt-get install -y -qq mongodb-org >/dev/null
+    echo "deb [ signed-by=/usr/share/keyrings/mongodb-server-8.0.gpg ] https://repo.mongodb.org/apt/ubuntu ${codename}/mongodb-org/8.0 multiverse" > /etc/apt/sources.list.d/mongodb-org-8.0.list
+    apt-get update -qq
+    apt-get install -y -qq mongodb-org >/dev/null || die "MongoDB failed to install on Ubuntu ${VERSION_ID}. Paste this output to Claude."
     systemctl enable --now mongod >/dev/null
     sleep 3
   fi
@@ -99,8 +116,8 @@ env_set "$S" ANALYZER_URL "http://127.0.0.1:8000"
 env_set "$S" ANALYZER_PUBLIC_URL "$BASE/analyzer"
 env_set "$S" RUN_WORKER false
 env_default "$S" MONGODB_URI "mongodb://127.0.0.1:27017/ai_leadgen"
-env_default "$S" PLATFORM_ADMIN_EMAILS "$ADMIN_EMAIL"
-env_default "$S" AUTOMATION_MODE n8n
+if [[ -n "${ADMIN_EMAIL_SET:-}" ]]; then env_set "$S" PLATFORM_ADMIN_EMAILS "$ADMIN_EMAIL"; else env_default "$S" PLATFORM_ADMIN_EMAILS "$ADMIN_EMAIL"; fi
+if [[ -n "${AUTOMATION_MODE:-}" ]]; then env_set "$S" AUTOMATION_MODE "$AUTOMATION_MODE"; else env_default "$S" AUTOMATION_MODE n8n; fi
 env_default "$S" AI_ENABLED false
 env_default "$S" GOOGLE_PLACES_ENABLED false
 env_default "$S" JWT_SECRET "$(rand 32)"
@@ -192,7 +209,17 @@ if [[ "${SKIP_NGINX:-0}" != 1 ]]; then
 fi
 
 # ---------------------------------------------------------------- 6. what to paste into n8n
-step "Next: n8n credentials (n8n.dealpost.co.in → Credentials → Add)"
+if [[ $MODE == direct ]]; then
+  step "Next: email sending (direct mode, no n8n needed)"
+  cat <<EOF
+  Everything runs inside the app: OpenStreetMap searches (free), website checks, rule-based scores, template drafts.
+  To let approved emails go out, add this line to $S, then re-run this script:
+     SMTP_URL=smtps://you%40yourdomain.com:<app-password>@smtp.gmail.com:465
+  (Google Workspace / Gmail: create an App Password under Google Account > Security.)
+  Sign up at $BASE with $(env_get "$S" PLATFORM_ADMIN_EMAILS | cut -d, -f1) to get the admin dashboard.
+EOF
+else
+step "Next: n8n credentials ($N8N_URL → Credentials → Add)"
 cat <<EOF
   1. Header Auth  "LeadGen Webhook Auth"
        Name:  X-LeadGen-Key
@@ -209,4 +236,5 @@ cat <<EOF
   Then open each "AI LeadGen" workflow, pick these credentials on the nodes marked with a warning, and publish.
   Sign up at $BASE with $(env_get "$S" PLATFORM_ADMIN_EMAILS | cut -d, -f1) to get the admin dashboard.
 EOF
+fi
 printf '\n%sDone.%s Logs: pm2 logs   Re-run this script after every code update.\n' "$c_ok" "$c_0"
