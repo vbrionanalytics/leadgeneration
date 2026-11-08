@@ -82,7 +82,7 @@ export default function LeadDetail() {
                 {l.evidence.map((e, i) => (
                   <li key={i} className="flex gap-3 py-2.5 text-sm">
                     <span className={`w-10 shrink-0 text-right font-display font-bold ${e.impact > 0 ? 'text-hot' : e.impact < 0 ? 'text-cold' : 'text-ink-2'}`}>{e.impact > 0 ? '+' : ''}{e.impact}</span>
-                    <div><b>{e.signal}</b> <span className="text-ink-2">{e.detail}</span><div className="text-xs text-ink-2">Source: {e.source === 'google_places' ? 'Google listing' : e.source === 'website' ? 'their website' : 'derived from the above'}</div></div>
+                    <div><b>{e.signal}</b> <span className="text-ink-2">{e.detail}</span><div className="text-xs text-ink-2">Source: {e.source === 'google_places' ? (l.source === 'openstreetmap' ? 'OpenStreetMap listing' : 'Google listing') : e.source === 'website' ? 'their website' : 'derived from the above'}</div></div>
                   </li>
                 ))}
               </ul>
@@ -184,7 +184,7 @@ function AddContact({ open, onClose, leadId, onDone }: { open: boolean; onClose:
         </div>
         <div><label className="label" htmlFor="src">Where did it come from?</label>
           <select id="src" className="input" value={f.source} onChange={(e) => setF({ ...f, source: e.target.value })}>
-            <option value="website_public">Published on their website</option><option value="consent_form">They gave consent (form, event, call)</option><option value="manual">Other / direct relationship</option>
+            <option value="website_public">Published on their website</option><option value="consent_form">They gave it to you / consented (form, event, call, existing client)</option><option value="manual">Other source (no consent recorded)</option>
           </select></div>
         {f.source === 'website_public' && <div><label className="label" htmlFor="url">Page URL where it's published</label><input id="url" className="input" type="url" required value={f.sourceUrl} onChange={(e) => setF({ ...f, sourceUrl: e.target.value })} /></div>}
         {f.source === 'consent_form' && <label className="flex gap-2 text-sm"><input type="checkbox" checked={f.consentConfirmed} onChange={(e) => setF({ ...f, consentConfirmed: e.target.checked })} /> I hold a record of this person's consent to be contacted.</label>}

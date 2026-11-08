@@ -4,8 +4,8 @@ import { logger } from '../utils';
 
 export type JobType = 'discovery' | 'analysis' | 'email_generate' | 'email_send' | 'marketplace_review' | 'maintenance';
 
-export async function enqueue(type: JobType, payload: Record<string, unknown>, orgId?: Types.ObjectId | string, delayMs = 0) {
-  return Job.create({ type, payload, orgId, runAt: new Date(Date.now() + delayMs) });
+export async function enqueue(type: JobType, payload: Record<string, unknown>, orgId?: Types.ObjectId | string, delayMs = 0, maxAttempts?: number) {
+  return Job.create({ type, payload, orgId, runAt: new Date(Date.now() + delayMs), ...(maxAttempts ? { maxAttempts } : {}) });
 }
 
 export type Handler = (payload: any, job: { _id: Types.ObjectId; attempts: number }) => Promise<void>;

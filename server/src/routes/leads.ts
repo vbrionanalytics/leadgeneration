@@ -37,7 +37,8 @@ searchRouter.post('/', requireScope('search:write'), validate(z.object({
   const { autoAnalyze, ...query } = req.body;
   query.country = query.country.toUpperCase();
   const job = await SearchJob.create({ orgId: req.auth!.orgId, userId: req.auth!.userId, query, autoAnalyze });
-  await enqueue('discovery', { jobId: String(job._id) }, req.auth!.orgId);
+  // Public map servers are often busy for a few minutes; keep retrying (30s, 1m, 2m, 4m, 8m)
+  await enqueue('discovery', { jobId: String(job._id) }, req.auth!.orgId, 0, 6);
   await audit('search.create', { orgId: req.auth!.orgId, userId: req.auth!.userId, target: String(job._id), meta: query, req });
   res.status(202).json(job);
 }));
