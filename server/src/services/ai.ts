@@ -118,6 +118,12 @@ export function heuristicScore(lead: LeadContext, a: WebsiteAnalysis | null, ser
   if (!lead.website) {
     need += 35; add('No website', 'Listing has no website URL.', 'google_places', 20);
     opp.push({ title: 'Build a website', description: 'Business has no website listed.', priority: 'high' });
+  } else if (a && !a.ok && /ENOTFOUND|NXDOMAIN|ConnectError|Unreachable|HTTP [45]\d\d|SSL|certificate/i.test(a.error || '') && !/robots/i.test(a.error || '')) {
+    // The listed website is down or broken: an observed fact, and the clearest need a web agency can fill
+    need += 40;
+    const why = /ENOTFOUND|NXDOMAIN/i.test(a.error!) ? 'domain does not resolve' : /SSL|certificate/i.test(a.error!) ? 'SSL certificate error' : a.error!;
+    add('Website is broken', `Listed website ${a.url || lead.website} failed to load (${why}).`, 'website', 25);
+    opp.push({ title: 'Fix or rebuild the broken website', description: `Their listed site fails to load (${why}); customers who look them up hit a dead end.`, priority: 'high' });
   } else if (!a || !a.ok) {
     add('Website not analysed', a?.error ? `Analysis failed: ${a.error}` : 'Website could not be analysed.', 'website', 0);
   } else {
@@ -141,7 +147,7 @@ export function heuristicScore(lead: LeadContext, a: WebsiteAnalysis | null, ser
   const clamp = (n: number) => Math.max(0, Math.min(100, Math.round(n)));
   const oppText = opp.map((o) => o.title.toLowerCase()).join(' ');
   const recommended = services
-    .filter((s) => s.name.toLowerCase().split(/\W+/).some((w) => w.length > 3 && oppText.includes(w)))
+    .filter((s) => s.name.toLowerCase().split(/\W+/).some((w) => w.length >= 3 && !["and", "the", "for"].includes(w) && oppText.includes(w)))
     .slice(0, 3)
     .map((s) => ({ name: s.name, reason: 'Matches detected opportunities.' }));
   const fit = clamp(services.length ? 30 + recommended.length * 20 : 50);

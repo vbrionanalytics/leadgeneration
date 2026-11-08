@@ -1,0 +1,20 @@
+import { describe, expect, it } from 'vitest';
+process.env.JWT_SECRET = 'test-secret-test-secret-test-secret-123';
+process.env.ENCRYPTION_KEY = 'test-encryption-key-test-encryption-key';
+const { heuristicScore } = await import('./services/ai');
+const svc = [{ name: 'Website Redesign' }, { name: 'SEO Optimisation' }];
+const lead = { name: 'X', website: 'https://x.test' };
+
+describe('rule-based score', () => {
+  it('treats a dead or broken website as high need', () => {
+    const dead = heuristicScore(lead, { ok: false, url: lead.website, error: 'getaddrinfo ENOTFOUND x.test' }, svc);
+    const fine = heuristicScore(lead, { ok: true, https: true, has_viewport: true, has_analytics: true, seo_issues: [], has_contact_form: true }, svc);
+    expect(dead.breakdown.need).toBeGreaterThan(fine.breakdown.need + 30);
+    expect(dead.evidence[0].signal).toBe('Website is broken');
+    expect(dead.recommended_services.map((s) => s.name)).toContain('Website Redesign');
+  });
+  it('does not treat a robots.txt refusal as a broken site', () => {
+    const r = heuristicScore(lead, { ok: false, error: 'Disallowed by robots.txt' }, svc);
+    expect(r.evidence[0].signal).toBe('Website not analysed');
+  });
+});
