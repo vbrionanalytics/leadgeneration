@@ -12,7 +12,7 @@ import { analyzeWebsite, dispatchToN8n } from '../services/integrations';
 import { applyReview, reviewPreview, runMaintenance } from '../services/marketplace';
 import { applyAnalysis, draftContext, failAnalysis, failSearchJob, ingestDiscoveryResults, markEmailResult, precheckSend, saveDraft } from '../services/pipeline';
 import { PLACES_MAX_PER_QUERY, searchPlaces } from '../services/places';
-import { buildOverpassQuery, searchOsm } from '../services/osm';
+import { buildOverpassQuery, searchOsm, searchOsmLocal } from '../services/osm';
 import { Handler, JobType, PermanentError, enqueue, runNext } from '../services/queue';
 import { decrypt, logger, sleep } from '../utils';
 
@@ -32,6 +32,9 @@ const discovery: Handler = async ({ jobId }) => {
     : [''];
   const provider = q.provider || 'openstreetmap';
   if (provider === 'openstreetmap') {
+    // The server's own map copy answers instantly, so use it even when n8n handles automation
+    const local = await searchOsmLocal({ category: q.category, city: q.city, country: q.country, keywords: q.keywords, max: q.maxResults! });
+    if (local) { await ingestDiscoveryResults(jobId, local, true); return; }
     const overpassQuery = buildOverpassQuery({ category: q.category, city: q.city, country: q.country, keywords: q.keywords });
     if (n8n()) {
       await dispatchToN8n('discovery', { jobId, orgId: String(job.orgId), provider, overpassQuery, maxResults: q.maxResults });

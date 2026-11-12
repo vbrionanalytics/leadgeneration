@@ -5,6 +5,7 @@
  */
 import { HttpError } from '../utils';
 import type { DiscoveredPlace } from './places';
+import { searchLocalElements } from './osmLocal';
 
 /** Public servers, tried in order. They throttle heavy automated use; set OVERPASS_URL to your own instance for volume. */
 export const OVERPASS_URLS = (process.env.OVERPASS_URL || 'https://overpass-api.de/api/interpreter,https://overpass.kumi.systems/api/interpreter')
@@ -126,8 +127,27 @@ export function selectOsmResults(elements: any[], fallback: { city?: string | nu
   return mapped.slice(0, max);
 }
 
-/** Direct-mode discovery (no n8n). */
+/**
+ * Search the server's own copy of OpenStreetMap data. Returns null when there's no local copy or the
+ * city isn't in it (then the public Overpass servers are used).
+ */
+export async function searchOsmLocal(opts: { category: string; city?: string | null; country: string; keywords?: string | null; max: number }): Promise<DiscoveredPlace[] | null> {
+  if (!opts.city) return null;
+  const r = await searchLocalElements(cityNames(opts.city), categoryFilters(opts.category, opts.keywords ?? undefined));
+  if (r.status !== 'ok') return null;
+  const places = selectOsmResults(r.elements, opts, opts.max);
+  if (!places.length) {
+    const err: any = new HttpError(404, `No "${opts.category}" are mapped in ${titleCase(opts.city)} on OpenStreetMap. Try a broader category (for example Hospitals, Schools, Hotels, Restaurants) or a nearby larger city.`, 'osm_none');
+    err.permanent = true;
+    throw err;
+  }
+  return places;
+}
+
+/** Direct-mode discovery (no n8n): local copy first, public Overpass servers as fallback. */
 export async function searchOsm(opts: { category: string; city?: string | null; country: string; keywords?: string | null; max: number }) {
+  const local = await searchOsmLocal(opts);
+  if (local) return local;
   const body = `data=${encodeURIComponent(buildOverpassQuery(opts))}`;
   let last = '';
   for (const url of OVERPASS_URLS) {
