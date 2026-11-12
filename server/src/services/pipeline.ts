@@ -218,7 +218,7 @@ export async function draftContext(emailId: string) {
 }
 
 // ============================================================ Approval & sending
-export async function approveEmail(emailId: string, orgId: Types.ObjectId | string, userId: Types.ObjectId | string, edits?: { subject?: string; body?: string }) {
+export async function approveEmail(emailId: string, orgId: Types.ObjectId | string, userId: Types.ObjectId | string, edits?: { subject?: string; body?: string }, sendDelayMs = 0) {
   const email = await Email.findOne({ _id: emailId, orgId });
   if (!email) throw notFound('Email not found');
   if (email.status !== 'pending_approval') throw badRequest(`Email is ${email.status}; only pending emails can be approved.`);
@@ -234,7 +234,7 @@ export async function approveEmail(emailId: string, orgId: Types.ObjectId | stri
   email.approvedBy = userId as any;
   email.approvedAt = new Date();
   await email.save();
-  await enqueue('email_send', { emailId: String(email._id) }, orgId);
+  await enqueue('email_send', { emailId: String(email._id) }, orgId, sendDelayMs);
   return email;
 }
 

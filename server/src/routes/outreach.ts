@@ -24,6 +24,49 @@ emailsRouter.post('/generate', validate(z.object({ leadIds: z.array(z.string()).
   res.status(202).json({ results });
 }));
 
+// Write drafts for every lead that has an email and hasn't been contacted yet. Drafts still wait for approval.
+emailsRouter.post('/generate-all', validate(z.object({ campaignId: z.string().optional() })), asyncH(async (req, res) => {
+  const orgId = req.auth!.orgId;
+  const already = await Email.distinct('leadId', { orgId, status: { $in: ['generating', 'pending_approval', 'approved', 'queued', 'sent'] } });
+  const leads = await Lead.find({
+    orgId, _id: { $nin: already }, 'contacts.type': 'email',
+    status: { $nin: ['contacted', 'replied', 'won', 'lost', 'do_not_contact'] }
+  }).sort({ score: -1 }).limit(200).select('_id');
+  let created = 0;
+  const skipped: string[] = [];
+  for (const l of leads) {
+    try {
+      await createEmailDraft({ orgId, leadId: String(l._id), campaignId: req.body.campaignId });
+      created++;
+    } catch (err: any) {
+      skipped.push(err.message);
+      if (err.status === 402) break; // out of credits
+    }
+  }
+  await audit('email.generate_all', { orgId, userId: req.auth!.userId, meta: { created, skipped: skipped.length }, req });
+  res.status(202).json({ created, skipped: skipped.length, firstError: skipped[0] });
+}));
+
+// Approve and send every draft that passes the compliance checks. Sends are spaced out to protect
+// the sender's reputation (Gmail flags bursts); blocked drafts stay in the queue with the reason.
+const SEND_GAP_MS = 40_000;
+emailsRouter.post('/approve-all', validate(z.object({ limit: z.number().int().min(1).max(100).default(50) })), asyncH(async (req, res) => {
+  const orgId = req.auth!.orgId;
+  const drafts = await Email.find({ orgId, status: 'pending_approval' }).sort({ createdAt: 1 }).limit(req.body.limit).select('_id');
+  let approved = 0;
+  const blocked: string[] = [];
+  for (const d of drafts) {
+    try {
+      await approveEmail(String(d._id), orgId, req.auth!.userId!, undefined, approved * SEND_GAP_MS);
+      approved++;
+    } catch (err: any) {
+      blocked.push(err.message);
+    }
+  }
+  await audit('email.approve_all', { orgId, userId: req.auth!.userId, meta: { approved, blocked: blocked.length }, req });
+  res.json({ approved, blocked: blocked.length, firstReason: blocked[0], minutes: Math.ceil((approved * SEND_GAP_MS) / 60_000) });
+}));
+
 emailsRouter.get('/', validate(z.object({ status: z.string().optional(), campaignId: z.string().optional(), leadId: z.string().optional(), page: z.coerce.number().default(1) }), 'query'), asyncH(async (req, res) => {
   const q = (req as any).validQuery;
   const f: Record<string, unknown> = { orgId: req.auth!.orgId };

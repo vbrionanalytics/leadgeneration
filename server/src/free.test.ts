@@ -206,3 +206,21 @@ describe('busy map servers', () => {
     await request(app).post(`/api/searches/${r.body._id}/cancel`).set(H);
   });
 });
+
+describe('bulk outreach', () => {
+  it('writes drafts for every lead with an email, then approves them with spaced sends', async () => {
+    await request(app).patch('/api/org').set(H).send({ sender: { name: 'Prawin', email: 'hello@dealpost.test', companyName: 'Dealpost', postalAddress: '1 Main Road, Erode 638001, India' } });
+    const g = await request(app).post('/api/emails/generate-all').set(H).send({});
+    expect(g.status).toBe(202);
+    expect(g.body.created).toBeGreaterThan(0);
+    const again = await request(app).post('/api/emails/generate-all').set(H).send({});
+    expect(again.body.created).toBe(0); // no duplicates
+    const pending = (await request(app).get('/api/emails/stats').set(H)).body.pending;
+    const a = await request(app).post('/api/emails/approve-all').set(H).send({});
+    expect(a.status).toBe(200);
+    expect(a.body.approved + a.body.blocked).toBe(pending);
+    const { Job } = await import('./models');
+    const sends = await Job.find({ type: 'email_send', status: 'pending' }).sort({ runAt: 1 }).lean();
+    if (sends.length > 1) expect(+sends[1].runAt - +sends[0].runAt).toBeGreaterThanOrEqual(39_000);
+  });
+});

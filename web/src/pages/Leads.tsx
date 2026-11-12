@@ -30,6 +30,14 @@ export default function LeadsPage() {
     },
     onError: fail
   });
+  const draftAll = useMutation({
+    mutationFn: async () => (await api.post('/emails/generate-all', {})).data,
+    onSuccess: (d) => {
+      qc.invalidateQueries({ queryKey: ['email-stats'] });
+      done(d.created ? `${d.created} email draft(s) written. Review them in Outreach, then Approve and send all.${d.skipped ? ` ${d.skipped} skipped: ${d.firstError}` : ''}` : `No new drafts: every lead with an email already has one, or none of your leads has an email yet.`);
+    },
+    onError: fail
+  });
   const bulk = useMutation({ mutationFn: async (body: any) => (await api.post('/leads/bulk', { leadIds: selected, ...body })).data, onSuccess: (d) => done(`${d.affected} lead(s) updated.`), onError: fail });
 
   const exportXlsx = async () => {
@@ -49,7 +57,7 @@ export default function LeadsPage() {
 
   return (
     <>
-      <PageHeader title="Leads" sub={q.data ? `${q.data.total} lead${q.data.total === 1 ? '' : 's'} match these filters.` : undefined} actions={<button className="btn-outline" onClick={exportXlsx}><Download className="h-4 w-4" /> Export to Excel</button>} />
+      <PageHeader title="Leads" sub={q.data ? `${q.data.total} lead${q.data.total === 1 ? '' : 's'} match these filters.` : undefined} actions={<div className="flex flex-wrap gap-2"><button className="btn-primary" disabled={draftAll.isPending} onClick={() => draftAll.mutate()} title="Writes a draft for every lead with an email that hasn't been contacted. Nothing is sent until you approve.">{draftAll.isPending ? <Spinner /> : <Mail className="h-4 w-4" />} Write emails for all</button><button className="btn-outline" onClick={exportXlsx}><Download className="h-4 w-4" /> Export to Excel</button></div>} />
 
       <div className="panel mb-4 grid gap-3 p-3 sm:grid-cols-2 lg:grid-cols-6">
         <input className="input lg:col-span-2" placeholder="Search by business name" defaultValue={filters.q} onKeyDown={(e) => e.key === 'Enter' && setF('q', (e.target as HTMLInputElement).value)} onBlur={(e) => setF('q', e.target.value)} aria-label="Search by name" />

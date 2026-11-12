@@ -24,10 +24,24 @@ export default function Outreach() {
   const items: EmailMsg[] = list.data?.items || [];
   const active = items.find((e) => e._id === activeId) || items.find((e) => e.status === 'pending_approval') || items[0];
   const s = stats.data || {};
+  const [note, setNote] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
+  const pendingCount = s.pending ?? 0;
+  const sendAll = useMutation({
+    mutationFn: async () => (await api.post('/emails/approve-all', { limit: 50 })).data,
+    onSuccess: (d) => {
+      qc.invalidateQueries({ queryKey: ['emails'] }); qc.invalidateQueries({ queryKey: ['email-stats'] });
+      setNote({ tone: d.approved ? 'success' : 'error', text: d.approved
+        ? `${d.approved} email(s) approved. They go out one every 40 seconds (about ${d.minutes} min) from your sender address.${d.blocked ? ` ${d.blocked} not sent: ${d.firstReason}` : ''}`
+        : `Nothing sent. ${d.firstReason || 'No drafts are waiting.'}` });
+    },
+    onError: (e) => setNote({ tone: 'error', text: errMsg(e) })
+  });
 
   return (
     <>
-      <PageHeader title="Outreach" sub="Drafts are written for you from each lead’s evidence. Nothing is sent until you read and approve each one. Every email carries your address and a working unsubscribe link." />
+      <PageHeader title="Outreach" sub="Drafts are written for you from each lead’s evidence. Nothing is sent until you approve it. Every email carries your address and a working unsubscribe link."
+        actions={pendingCount > 0 && <button className="btn-primary" disabled={sendAll.isPending} onClick={() => confirm(`Approve and send ${Math.min(pendingCount, 50)} email(s) now? Read a few first: they go to real businesses.`) && sendAll.mutate()}>{sendAll.isPending && <Spinner />} Approve and send all ({Math.min(pendingCount, 50)})</button>} />
+      {note && <div className="mb-4"><Alert tone={note.tone}>{note.text}</Alert></div>}
       <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-5">
         <Stat label="To approve" value={s.pending ?? 0} />
         <Stat label="Sent" value={s.sent ?? 0} />
