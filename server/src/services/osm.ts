@@ -38,8 +38,40 @@ const CATEGORY_TAGS: [RegExp, string[]][] = [
   [/electronic|mobile shop|computer/i, ['["shop"~"^(electronics|mobile_phone|computer)$"]']],
   [/super ?market|grocery/i, ['["shop"~"^(supermarket|convenience|greengrocer)$"]']],
   [/travel|tour/i, ['["shop"="travel_agency"]', '["office"="travel_agent"]']],
-  [/it company|software|web/i, ['["office"~"^(it|company)$"]']]
+  [/^\s*it\b|\bit (company|companies|firm|services?|park)|software|web (design|develop)|tech(nology)? (company|firm)/i, ['["office"~"^(it|company|telecommunication)$"]', '["office"]["name"~"(soft|tech|infotech|systems|solutions|digital)",i]']]
 ];
+
+/** Common spellings and old names → the names OpenStreetMap uses (matched case-insensitively). */
+const CITY_ALIASES: Record<string, string[]> = {
+  bangalore: ['Bengaluru', 'Bangalore'], banglore: ['Bengaluru', 'Bangalore'], bengaluru: ['Bengaluru', 'Bangalore'], bengalore: ['Bengaluru', 'Bangalore'], blr: ['Bengaluru'],
+  bombay: ['Mumbai'], mumbai: ['Mumbai', 'Bombay'], madras: ['Chennai'], chennai: ['Chennai', 'Madras'], calcutta: ['Kolkata'], kolkata: ['Kolkata', 'Calcutta'],
+  kovai: ['Coimbatore'], coimbatore: ['Coimbatore', 'Kovai'], cbe: ['Coimbatore'], trichy: ['Tiruchirappalli', 'Tiruchirapalli', 'Trichy'], tiruchy: ['Tiruchirappalli'],
+  tiruchirappalli: ['Tiruchirappalli', 'Tiruchirapalli'], madurai: ['Madurai'], salem: ['Salem'], tirupur: ['Tiruppur', 'Tirupur'], tiruppur: ['Tiruppur', 'Tirupur'],
+  pondicherry: ['Puducherry', 'Pondicherry'], pondy: ['Puducherry'], puducherry: ['Puducherry', 'Pondicherry'], ooty: ['Udhagamandalam', 'Ooty'],
+  mysore: ['Mysuru', 'Mysore'], mysuru: ['Mysuru', 'Mysore'], mangalore: ['Mangaluru', 'Mangalore'], mangaluru: ['Mangaluru', 'Mangalore'],
+  gurgaon: ['Gurugram', 'Gurgaon'], gurugram: ['Gurugram', 'Gurgaon'], poona: ['Pune'], baroda: ['Vadodara'], vizag: ['Visakhapatnam'],
+  trivandrum: ['Thiruvananthapuram', 'Trivandrum'], cochin: ['Kochi', 'Cochin'], kochi: ['Kochi', 'Cochin'], calicut: ['Kozhikode', 'Calicut'],
+  delhi: ['Delhi', 'New Delhi'], 'new delhi': ['New Delhi', 'Delhi'], hyderabad: ['Hyderabad'], secunderabad: ['Secunderabad'], tanjore: ['Thanjavur'], thanjavur: ['Thanjavur', 'Tanjore'],
+  nellai: ['Tirunelveli'], tirunelveli: ['Tirunelveli'], vellore: ['Vellore'], erode: ['Erode'], karur: ['Karur'], namakkal: ['Namakkal'], hosur: ['Hosur'], dindigul: ['Dindigul']
+};
+
+/** Names to look for when finding the city's boundary: known spellings, else the typed name in Title Case and as typed. */
+export function cityNames(city: string): string[] {
+  const typed = city.trim().replace(/\s+/g, ' ').replace(/ (city|district|town)$/i, '');
+  const known = CITY_ALIASES[typed.toLowerCase()];
+  if (known) return known;
+  const title = typed.toLowerCase().replace(/(^|[\s-])\S/g, (c) => c.toUpperCase());
+  return [...new Set([title, typed])];
+}
+/**
+ * Overpass filter for the city's boundary. Exact matches on several name tags use Overpass's index,
+ * so this stays fast on busy public servers (a case-insensitive regex here scans every area and times out).
+ */
+function cityAreaFilter(city: string) {
+  const keys = ['name', 'name:en', 'alt_name', 'old_name'];
+  const parts = cityNames(city).flatMap((n) => keys.map((k) => `area["boundary"="administrative"]["${k}"="${esc(n)}"];`));
+  return `(${parts.join('')})->.city;`;
+}
 
 const titleCase = (s?: string | null) => (s ? s.trim().replace(/\b\w/g, (c) => c.toUpperCase()) : s);
 const esc = (s: string) => s.replace(/["\\]/g, '\\$&');
@@ -55,7 +87,7 @@ export function categoryFilters(category: string, keywords?: string): string[] {
 /** Overpass QL for businesses of a category inside a city's administrative area. */
 export function buildOverpassQuery(opts: { category: string; city?: string | null; country: string; keywords?: string | null; requireWebsite?: boolean }) {
   if (!opts.city) throw new HttpError(400, 'Enter a city to search OpenStreetMap.', 'city_required');
-  const area = `area["name"="${esc(opts.city.trim())}"]["boundary"="administrative"]->.city;`;
+  const area = cityAreaFilter(opts.city);
   const site = opts.requireWebsite ? '["website"]' : '';
   const parts = categoryFilters(opts.category, opts.keywords ?? undefined).map((f) => `nwr${f}${site}(area.city);`).join('');
   return `[out:json][timeout:60];${area}(${parts});out center tags 500;`;
@@ -108,12 +140,46 @@ export async function searchOsm(opts: { category: string; city?: string | null; 
       });
       if (res.ok) {
         const data: any = await res.json();
-        return selectOsmResults(data.elements || [], opts, opts.max);
+        // An overloaded server can answer 200 with no elements and a remark like "runtime error: Query timed out".
+        // That is not "nothing found": try the next server / retry later.
+        if (data.remark && /error|timed out|out of memory/i.test(data.remark) && !(data.elements || []).length) { last = data.remark; continue; }
+        const places = selectOsmResults(data.elements || [], opts, opts.max);
+        if (!places.length) await explainEmpty(url, opts);
+        return places;
       }
       last = `HTTP ${res.status}`; // 429/502/504 = server busy: try the next one
     } catch (e: any) {
+      if (e?.permanent) throw e; // a definite answer (unknown city / nothing mapped), not a busy server
       last = e.message;
     }
   }
   throw new HttpError(502, `OpenStreetMap servers are busy (${last}). The search will retry automatically.`, 'osm_busy');
+}
+
+/**
+ * A search with no results either named a city OpenStreetMap doesn't know (spelling) or found no
+ * mapped businesses of that kind there. Tell the user which, so they can fix the search.
+ */
+async function explainEmpty(url: string, opts: { category: string; city?: string | null }) {
+  let cityFound = true;
+  try {
+    const res = await fetch(url, {
+      method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'AILeadGen/1.0' },
+      body: `data=${encodeURIComponent(`[out:json][timeout:25];${cityAreaFilter(opts.city || '')}.city out ids;`)}`, signal: AbortSignal.timeout(30_000)
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    {
+      const d: any = await res.json();
+      if (d.remark && /error|timed out/i.test(d.remark)) throw new Error(d.remark);
+      cityFound = (d.elements || []).length > 0;
+    }
+  } catch (e: any) {
+    // Can't tell right now: report busy so the search retries rather than wrongly saying "nothing here"
+    throw new HttpError(502, `OpenStreetMap servers are busy (${e?.message || 'no answer'}). The search will retry automatically.`, 'osm_busy');
+  }
+  const err: any = cityFound
+    ? new HttpError(404, `No "${opts.category}" are mapped in ${titleCase(opts.city)} on OpenStreetMap. Try a broader category (for example Hospitals, Schools, Hotels, Restaurants) or a nearby larger city.`, 'osm_none')
+    : new HttpError(404, `OpenStreetMap doesn't know a city called "${opts.city}". Check the spelling (for example Bengaluru, Coimbatore, Erode).`, 'osm_city_unknown');
+  err.permanent = true; // retrying won't help
+  throw err;
 }

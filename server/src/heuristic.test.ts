@@ -34,3 +34,14 @@ describe('service matching', () => {
     expect(matchServices(['Set up analytics'], 'school', vbrion).map((s) => s.name)[0]).toBe('Education Analytics');
   });
 });
+
+describe('OpenStreetMap search terms', () => {
+  it('finds cities whatever the case or common spelling', async () => {
+    const { cityNames, buildOverpassQuery, categoryFilters } = await import('./services/osm');
+    expect(cityNames('erode')).toEqual(['Erode']);
+    expect(cityNames('banglore')).toContain('Bengaluru');
+    expect(buildOverpassQuery({ category: 'Restaurants', city: 'erode', country: 'IN' })).toContain('["name"="Erode"]');
+    expect(categoryFilters('IT')[0]).toContain('"office"');
+    expect(categoryFilters('lodges')[0]).toContain('tourism');
+  });
+});

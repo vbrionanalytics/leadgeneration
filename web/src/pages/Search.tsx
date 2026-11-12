@@ -21,6 +21,7 @@ export default function SearchPage() {
     mutationFn: async () => (await api.post('/searches', { ...f, city: f.city || undefined, keywords: f.keywords || undefined })).data,
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['searches'] }); qc.invalidateQueries({ queryKey: ['balance'] }); }
   });
+  const remove = useMutation({ mutationFn: async (id: string) => api.delete(`/searches/${id}`), onSuccess: () => qc.invalidateQueries({ queryKey: ['searches'] }) });
   const cancel = useMutation({ mutationFn: async (id: string) => api.post(`/searches/${id}/cancel`), onSuccess: () => qc.invalidateQueries({ queryKey: ['searches'] }) });
   const maxAllowed = org?.planDetails?.maxResultsPerSearch ?? 20;
   const estimate = f.maxResults + (f.autoAnalyze ? f.maxResults * 2 : 0);
@@ -106,6 +107,7 @@ export default function SearchPage() {
                   <div className="mt-3 flex gap-2">
                     {j.stats.created > 0 && <Link to={`/leads?searchJobId=${j._id}`} className="btn-outline">View leads</Link>}
                     {live && <button className="btn-ghost" onClick={() => cancel.mutate(j._id)}>Cancel</button>}
+                    {!live && <button className="btn-ghost ml-auto" disabled={remove.isPending} onClick={() => remove.mutate(j._id)} title="Removes this search from the list. Its leads are kept.">Remove</button>}
                   </div>
                 </div>
               );

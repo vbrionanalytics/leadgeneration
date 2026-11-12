@@ -68,6 +68,13 @@ searchRouter.post('/:id/cancel', asyncH(async (req, res) => {
   res.json({ ok: true });
 }));
 
+// Remove a finished search from the list. Leads it created are kept.
+searchRouter.delete('/:id', asyncH(async (req, res) => {
+  const r = await SearchJob.deleteOne({ _id: req.params.id, orgId: req.auth!.orgId, status: { $in: ['completed', 'failed', 'cancelled'] } });
+  if (!r.deletedCount) throw notFound('Search not found or still running');
+  res.json({ ok: true });
+}));
+
 // ============================================================ Leads
 export const leadsRouter = Router();
 

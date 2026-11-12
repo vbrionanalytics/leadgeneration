@@ -26,7 +26,13 @@ const OSM = { elements: [
 const calls: string[] = [];
 vi.stubGlobal('fetch', async (url: any, init?: any) => {
   const u = String(url); calls.push(u);
-  if (u.includes('overpass')) return new Response(JSON.stringify(OSM), { status: 200 });
+  if (u.includes('overpass')) {
+    const q = decodeURIComponent(String(init?.body || ''));
+    if (q.includes('Busytown')) return new Response(JSON.stringify({ elements: [], remark: 'runtime error: Query timed out in "query" at line 1 after 60 seconds.' }), { status: 200 });
+    if (q.includes('Nowhereville')) return new Response(JSON.stringify({ elements: [] }), { status: 200 });
+    if (q.includes('submarine')) return new Response(JSON.stringify({ elements: q.includes('out ids') ? [{ type: 'area', id: 1 }] : [] }), { status: 200 });
+    return new Response(JSON.stringify(OSM), { status: 200 });
+  }
   if (u.startsWith('http://analyzer.test')) {
     const target = JSON.parse(init.body).url;
     if (target.includes('clarityimaging')) return new Response(JSON.stringify({ ok: false, url: target, error: 'Unreachable: ConnectError (getaddrinfo ENOTFOUND clarityimaging.net)' }), { status: 200 });
@@ -165,5 +171,38 @@ describe('template writer', () => {
   it('uses the campaign tone for the call to action', () => {
     const t = templateEmail({ lead: { name: 'X' }, sender: {}, campaign: { tone: 'concise' } });
     expect(t.body.trim().endsWith('Open to a 15-minute call this week?')).toBe(true);
+  });
+});
+
+describe('searches with no results', () => {
+  it('explains an unknown city, and finished searches can be removed', async () => {
+    const r = await request(app).post('/api/searches').set(H).send({ category: 'clinics', country: 'IN', city: 'nowhereville', maxResults: 5 });
+    await drain();
+    const job = (await request(app).get(`/api/searches/${r.body._id}`).set(H)).body;
+    expect(job.status).toBe('failed');
+    expect(job.error).toMatch(/doesn't know a city called "nowhereville"/);
+    expect((await request(app).delete(`/api/searches/${r.body._id}`).set(H)).status).toBe(200);
+    expect((await request(app).get(`/api/searches/${r.body._id}`).set(H)).status).toBe(404);
+  });
+  it('explains a category with nothing mapped in a known city', async () => {
+    const r = await request(app).post('/api/searches').set(H).send({ category: 'submarine dealers', country: 'IN', city: 'erode', maxResults: 5 });
+    await drain();
+    const job = (await request(app).get(`/api/searches/${r.body._id}`).set(H)).body;
+    expect(job.status).toBe('failed');
+    expect(job.error).toMatch(/No "submarine dealers" are mapped in Erode/);
+  });
+});
+
+describe('busy map servers', () => {
+  it('retries instead of reporting "nothing found" when the server times out', async () => {
+    const r = await request(app).post('/api/searches').set(H).send({ category: 'clinics', country: 'IN', city: 'busytown', maxResults: 5 });
+    await drain();
+    const job = (await request(app).get(`/api/searches/${r.body._id}`).set(H)).body;
+    expect(job.status).toBe('running');
+    const { Job } = await import('./models');
+    const q = await Job.findOne({ 'payload.jobId': r.body._id }).lean();
+    expect(q?.status).toBe('pending');
+    expect(q?.lastError).toMatch(/busy/);
+    await request(app).post(`/api/searches/${r.body._id}/cancel`).set(H);
   });
 });
