@@ -3,7 +3,7 @@
  * Data © OpenStreetMap contributors, ODbL — attribution is shown wherever OSM-sourced leads appear.
  * Only tags that OSM contributors published are used; nothing is inferred.
  */
-import { HttpError } from '../utils';
+import { HttpError, isOwnWebsite } from '../utils';
 import type { DiscoveredPlace } from './places';
 import { searchLocalElements } from './osmLocal';
 
@@ -120,10 +120,12 @@ export function mapOsmElement(e: any, fallback: { city?: string | null; country:
   };
 }
 
-/** Websites first (they can be analysed), then the rest; capped at max. */
+/** Most reachable businesses first (email, then website, then phone), nearest first within each; capped at max. */
 export function selectOsmResults(elements: any[], fallback: { city?: string | null; country: string }, max: number): DiscoveredPlace[] {
   const mapped = elements.map((e) => mapOsmElement(e, fallback)).filter((p): p is DiscoveredPlace => !!p);
-  mapped.sort((a, b) => Number(!!b.website) - Number(!!a.website));
+  // Most reachable first: an email can be written to, a website can be analysed (and may publish an email), a phone can be called
+  const reach = (p: DiscoveredPlace) => (p.email ? 4 : 0) + (p.website && isOwnWebsite(p.website) ? 2 : 0) + (p.phone ? 1 : 0);
+  mapped.sort((a, b) => reach(b) - reach(a));
   return mapped.slice(0, max);
 }
 

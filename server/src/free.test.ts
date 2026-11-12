@@ -224,3 +224,11 @@ describe('bulk outreach', () => {
     if (sends.length > 1) expect(+sends[1].runAt - +sends[0].runAt).toBeGreaterThanOrEqual(39_000);
   });
 });
+
+describe('plan limits in the session', () => {
+  it('tells the browser how many results a search may ask for', async () => {
+    const me = await request(app).get('/api/auth/me').set(H);
+    expect(me.body.organization.planDetails.maxResultsPerSearch).toBeGreaterThanOrEqual(20);
+    expect(me.body.organization.secrets).toBeUndefined();
+  });
+});

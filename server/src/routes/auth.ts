@@ -3,12 +3,15 @@ import bcrypt from 'bcryptjs';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { adminEmails } from '../config/env';
-import { PLANS } from '../config/plans';
+import { PLANS, PlanId } from '../config/plans';
 import { Organization, User } from '../models';
 import { asyncH, requireAuth, requireUser, signToken, validate } from '../middleware';
 import { addCredits } from '../services/credits';
 import { audit } from '../services/integrations';
 import { badRequest, conflict, randomToken, unauthorized } from '../utils';
+
+/** Organisation as the browser sees it: no secrets, plus the plan's limits (results per search, seats). */
+const withPlan = (o: any) => (o ? { ...o.toObject(), planDetails: PLANS[o.plan as PlanId] } : o);
 
 const r = Router();
 const limiter = rateLimit({ windowMs: 15 * 60_000, limit: 20, standardHeaders: true, legacyHeaders: false });
@@ -33,7 +36,7 @@ r.post(
     });
     await addCredits(org._id, PLANS.free.monthlyCredits, 'grant', 'Welcome credits (Free plan)', undefined, `welcome:${org._id}`);
     await audit('auth.register', { orgId: org._id, userId: user._id, req });
-    res.status(201).json({ token: signToken(user), user: publicUser(user), organization: await Organization.findById(org._id).select('-secrets') });
+    res.status(201).json({ token: signToken(user), user: publicUser(user), organization: withPlan(await Organization.findById(org._id).select('-secrets')) });
   })
 );
 
@@ -48,7 +51,7 @@ r.post(
     user.lastLoginAt = new Date();
     await user.save();
     await audit('auth.login', { orgId: user.orgId, userId: user._id, req });
-    res.json({ token: signToken(user), user: publicUser(user), organization: await Organization.findById(user.orgId).select('-secrets') });
+    res.json({ token: signToken(user), user: publicUser(user), organization: withPlan(await Organization.findById(user.orgId).select('-secrets')) });
   })
 );
 
@@ -58,7 +61,7 @@ r.get(
   requireUser,
   asyncH(async (req, res) => {
     const [user, org] = await Promise.all([User.findById(req.auth!.userId), Organization.findById(req.auth!.orgId).select('-secrets')]);
-    res.json({ user: publicUser(user!), organization: org });
+    res.json({ user: publicUser(user!), organization: withPlan(org) });
   })
 );
 
